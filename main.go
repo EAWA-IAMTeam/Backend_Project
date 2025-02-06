@@ -45,6 +45,8 @@ func main() {
 	e.POST("/products", productHandler.InsertProducts)
 	e.GET("/products/lazada/mapped/:store_id", productHandler.GetMappedProducts)
 	e.GET("/products/lazada/unmapped/:store_id", productHandler.GetUnmappedProducts)
+	e.DELETE("products/store/:store_id/product/:sku", productHandler.RemoveMappedProducts)
+	e.DELETE("products/store/:store_id", productHandler.RemoveMappedProductsBatch)
 
 	// Start server
 	port := "7000"

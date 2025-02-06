@@ -3,6 +3,7 @@ package repositories
 import (
 	"backend_project/internal/products/models"
 	"database/sql"
+	"errors"
 	"fmt"
 )
 
@@ -176,4 +177,43 @@ func (r *ProductRepository) GetStoreSkus(storeID string) (map[string]bool, error
 	}
 
 	return skus, rows.Err()
+}
+
+func (r *ProductRepository) DeleteMappedProductsBySKU(storeID, sku string) (int64, error) {
+	query := "DELETE FROM storeproduct WHERE store_id = $1 AND sku = $2"
+	result, err := r.DB.Exec(query, storeID, sku)
+	if err != nil {
+		return 0, err
+	}
+
+	rowsAffected, _ := result.RowsAffected() // Get number of affected rows
+	return rowsAffected, nil
+}
+
+func (r *ProductRepository) DeleteMappedProductsBySKUs(storeID string, skus []string) ([]string, []string, error) {
+	if len(skus) == 0 {
+		return nil, nil, errors.New("no SKUs provided")
+	}
+
+	var deletedSKUs []string
+	var failedSKUs []string
+
+	// Iterate over each SKU to delete individually
+	for _, sku := range skus {
+		query := "DELETE FROM storeproduct WHERE store_id = $1 AND sku = $2"
+		result, err := r.DB.Exec(query, storeID, sku)
+		if err != nil {
+			failedSKUs = append(failedSKUs, sku)
+			continue
+		}
+
+		rowsAffected, _ := result.RowsAffected()
+		if rowsAffected > 0 {
+			deletedSKUs = append(deletedSKUs, sku)
+		} else {
+			failedSKUs = append(failedSKUs, sku)
+		}
+	}
+
+	return deletedSKUs, failedSKUs, nil
 }

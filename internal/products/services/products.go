@@ -181,3 +181,18 @@ func (ps *ProductService) filterMappedProducts(resp interface{}, skusToRemove ma
 
 	return mappedProducts, nil
 }
+
+// Delete products that are MAPPED
+func (ps *ProductService) DeleteMappedProducts(storeID string, sku string) (int64, error) {
+	return ps.ProductRepo.DeleteMappedProductsBySKU(storeID, sku)
+}
+
+// DeleteMappedProductsBatch deletes multiple mapped products and returns successfully deleted and failed SKUs
+func (ps *ProductService) DeleteMappedProductsBatch(storeID string, skus []string) ([]string, []string, error) {
+	deletedSKUs, failedSKUs, err := ps.ProductRepo.DeleteMappedProductsBySKUs(storeID, skus)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return deletedSKUs, failedSKUs, nil
+}

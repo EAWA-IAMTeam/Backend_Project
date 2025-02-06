@@ -104,3 +104,65 @@ func (ph *ProductHandler) GetMappedProducts(c echo.Context) error {
 
 	return c.JSON(http.StatusOK, products)
 }
+
+// RemoveMappedProducts handles API requests to delete mapped products
+func (ph *ProductHandler) RemoveMappedProducts(c echo.Context) error {
+	storeID := c.Param("store_id")
+	sku := c.Param("sku")
+
+	if storeID == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"message": "store_id is required"})
+	}
+
+	if sku == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"message": "sku is required"})
+	}
+
+	rowsAffected, err := ph.ProductService.DeleteMappedProducts(storeID, sku)
+	if err != nil {
+		log.Printf("Error removing mapped product (store_id: %s, sku: %s): %v", storeID, sku, err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"message": "Failed to remove mapped product"})
+	}
+
+	if rowsAffected == 0 {
+		return c.JSON(http.StatusNotFound, map[string]string{"message": "Product not found or already removed"})
+	}
+
+	return c.JSON(http.StatusOK, map[string]string{"message": "Mapped product successfully removed"})
+}
+
+// RemoveMappedProductsBatch handles API requests to delete multiple mapped products
+func (ph *ProductHandler) RemoveMappedProductsBatch(c echo.Context) error {
+	storeID := c.Param("store_id")
+
+	if storeID == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"message": "store_id is required"})
+	}
+
+	var request struct {
+		SKUs []string `json:"skus"`
+	}
+
+	// Parse JSON body
+	if err := c.Bind(&request); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"message": "Invalid request body"})
+	}
+
+	if len(request.SKUs) == 0 {
+		return c.JSON(http.StatusBadRequest, map[string]string{"message": "At least one SKU is required"})
+	}
+
+	deletedSKUs, failedSKUs, err := ph.ProductService.DeleteMappedProductsBatch(storeID, request.SKUs)
+	if err != nil {
+		log.Printf("Error removing mapped products (store_id: %s): %v", storeID, err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"message": "Failed to remove mapped products"})
+	}
+
+	response := map[string]interface{}{
+		"message":        "Mapped products processed",
+		"deleted_skus":   deletedSKUs,
+		"failed_skus":    failedSKUs,
+	}
+
+	return c.JSON(http.StatusOK, response)
+}
