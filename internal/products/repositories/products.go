@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+
+	"github.com/lib/pq"
 )
 
 type ProductRepository struct {
@@ -47,16 +49,39 @@ func (pr *ProductRepository) GetStockItemsByCompany(companyID int) ([]*models.St
 	return stockItems, nil
 }
 
-// GetProductsByStore fetches products by store ID
-func (pr *ProductRepository) GetProductsByStore(storeID int) ([]*models.MergeProduct, error) {
+// GetProductsByCompany fetches products by company ID
+func (pr *ProductRepository) GetProductsByCompany(companyID int) ([]*models.MergeProduct, error) {
+	// Step 1: Fetch all store IDs for the given company
+	storeQuery := `SELECT id FROM store WHERE company_id = $1`
+	storeRows, err := pr.DB.Query(storeQuery, companyID)
+	if err != nil {
+		return nil, err
+	}
+	defer storeRows.Close()
+
+	var storeIDs []int
+	for storeRows.Next() {
+		var storeID int
+		if err := storeRows.Scan(&storeID); err != nil {
+			return nil, err
+		}
+		storeIDs = append(storeIDs, storeID)
+	}
+
+	// If no stores found, return empty result
+	if len(storeIDs) == 0 {
+		return []*models.MergeProduct{}, nil
+	}
+
+	// Step 2: Fetch all store products based on store IDs
 	query := `
         SELECT si.id, si.ref_price, si.ref_cost, si.quantity,
-               sp.id, sp.price, sp.discounted_price, sp.sku, sp.currency, sp.status
+               sp.id, sp.price, sp.discounted_price, sp.sku, sp.currency, sp.status, sp.store_id
         FROM storeproduct sp
         JOIN stockitem si ON sp.stock_item_id = si.id
-        WHERE sp.store_id = $1`
+        WHERE sp.store_id = ANY($1)`
 
-	rows, err := pr.DB.Query(query, storeID)
+	rows, err := pr.DB.Query(query, pq.Array(storeIDs)) // Using pq.Array for PostgreSQL IN clause
 	if err != nil {
 		return nil, err
 	}
@@ -69,7 +94,8 @@ func (pr *ProductRepository) GetProductsByStore(storeID int) ([]*models.MergePro
 
 		err := rows.Scan(
 			&stockItem.StockItemID, &stockItem.RefPrice, &stockItem.RefCost, &stockItem.Quantity,
-			&storeProduct.ID, &storeProduct.Price, &storeProduct.DiscountedPrice, &storeProduct.SKU, &storeProduct.Currency, &storeProduct.Status,
+			&storeProduct.ID, &storeProduct.Price, &storeProduct.DiscountedPrice, &storeProduct.SKU,
+			&storeProduct.Currency, &storeProduct.Status, &storeProduct.StoreID,
 		)
 		if err != nil {
 			return nil, err
@@ -82,6 +108,7 @@ func (pr *ProductRepository) GetProductsByStore(storeID int) ([]*models.MergePro
 		stockItemsMap[stockItem.StockItemID].StoreProducts = append(stockItemsMap[stockItem.StockItemID].StoreProducts, storeProduct)
 	}
 
+	// Convert map to slice
 	var result []*models.MergeProduct
 	for _, item := range stockItemsMap {
 		result = append(result, item)
@@ -89,6 +116,7 @@ func (pr *ProductRepository) GetProductsByStore(storeID int) ([]*models.MergePro
 
 	return result, nil
 }
+
 
 // InsertProductBatch inserts multiple products into the database
 func (pr *ProductRepository) InsertProductBatch(storeID int64, products []models.StoreProduct) (*models.InsertResult, error) {

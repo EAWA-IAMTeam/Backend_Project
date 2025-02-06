@@ -1,31 +1,5 @@
 package models
 
-type Product struct {
-	ItemID     int      `json:"item_id"`
-	Images     []string `json:"images"` // List of product images
-	Skus       []Sku    `json:"skus"`
-	Attributes struct {
-		Name        string `json:"name"`
-		Description string `json:"description"`
-	} `json:"attributes"`
-}
-
-type Sku struct {
-	Status       string   `json:"status"`
-	ShopSku      string   `json:"ShopSku"`
-	Images       []string `json:"Images"` // List of SKU images
-	Quantity     int      `json:"quantity"`
-	Price        float64  `json:"price"`
-	SpecialPrice float64  `json:"special_price"`
-}
-
-type ApiResponse struct {
-	Code string `json:"code"`
-	Data struct {
-		Products []Product `json:"products"`
-	} `json:"data"`
-}
-
 type StockItem struct {
 	ID               int64   `json:"stock_item_id"`
 	CompanyID        int     `json:"company_id"`
@@ -54,6 +28,7 @@ type StoreProduct struct {
 	SKU             string  `json:"sku"`
 	Currency        string  `json:"currency"`
 	Status          string  `json:"status"`
+	StoreID         int64   `json:"store_id"`
 }
 
 type MergeProduct struct {

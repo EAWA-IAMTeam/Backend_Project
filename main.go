@@ -40,13 +40,26 @@ func main() {
 	productHandler := handlers.NewProductHandler(productService)
 
 	// Define routes
-	e.GET("/products/company/:company_id", productHandler.GetStockItemsByCompany)
-	e.GET("/products/store/:store_id", productHandler.GetProductsByStore)
-	e.POST("/products", productHandler.InsertProducts)
-	e.GET("/products/lazada/mapped/:store_id", productHandler.GetMappedProducts)
+	e.GET("/products/stock-item/:company_id", productHandler.GetStockItemsByCompany)
+	e.GET("/products/store-products/:company_id", productHandler.GetProductsByCompany)
+
+
+
+
+	// Consider the struct
+	// TODO: Add Shopee, and TikTok 
 	e.GET("/products/lazada/unmapped/:store_id", productHandler.GetUnmappedProducts)
+	e.GET("/products/lazada/mapped/:store_id", productHandler.GetMappedProducts)
+
+	// TODO: change store to company
+	e.POST("/products/store-products", productHandler.InsertProducts)
+
+	// TODO: change store to company
 	e.DELETE("products/store/:store_id/product/:sku", productHandler.RemoveMappedProducts)
 	e.DELETE("products/store/:store_id", productHandler.RemoveMappedProductsBatch)
+
+
+
 
 	// Start server
 	port := "7000"
