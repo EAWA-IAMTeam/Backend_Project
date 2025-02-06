@@ -165,7 +165,7 @@ type Response struct {
 	Type      string          `json:"type"`
 	Message   string          `json:"message"`
 	RequestID string          `json:"request_id"`
-	Data      json.RawMessage `json:"data"`
+	Data      json.RawMessage `json:"data,onitempty"`
 }
 
 // ResponseError defines a error response
@@ -174,6 +174,18 @@ type ResponseError struct {
 	Type      string `json:"type"`
 	Message   string `json:"message"`
 	RequestID string `json:"request_id"`
+}
+
+type LazadaAuthResponse struct {
+	AccessToken      string `json:"access_token"`
+	Country          string `json:"country"`
+	RefreshToken     string `json:"refresh_token"`
+	AccountPlatform  string `json:"account_platform"`
+	ExpiresIn        int    `json:"expires_in"`
+	RefreshExpiresIn int    `json:"refresh_expires_in"`
+	Account          string `json:"account"`
+	Code             string `json:"code"`
+	RequestID        string `json:"request_id"`
 }
 
 func (lc *IopClient) getServerURL() string {
@@ -195,7 +207,7 @@ func (lc *IopClient) getServerURL() string {
 }
 
 // Execute sends the request though http.request and collect the response
-func (lc *IopClient) Execute(apiPath string, apiMethod string, bodyParams map[string]string) (*Response, error) {
+func (lc *IopClient) Execute(apiPath string, apiMethod string, bodyParams map[string]string) (*Response, *LazadaAuthResponse, error) {
 	var req *http.Request
 	var err error
 	var contentType string
@@ -216,11 +228,11 @@ func (lc *IopClient) Execute(apiPath string, apiMethod string, bodyParams map[st
 			for key, val := range lc.FileParams {
 				part, err := writer.CreateFormFile("image", key)
 				if err != nil {
-					return nil, err
+					return nil, nil, err
 				}
 				_, err = part.Write(val)
 				if err != nil {
-					return nil, err
+					return nil, nil, err
 				}
 			}
 		}
@@ -234,7 +246,7 @@ func (lc *IopClient) Execute(apiPath string, apiMethod string, bodyParams map[st
 		}
 
 		if err = writer.Close(); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 
@@ -252,7 +264,7 @@ func (lc *IopClient) Execute(apiPath string, apiMethod string, bodyParams map[st
 	req, err = http.NewRequest(apiMethod, fullURL, body)
 
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if contentType != "" {
 		req.Header.Add("Content-Type", contentType)
@@ -260,21 +272,52 @@ func (lc *IopClient) Execute(apiPath string, apiMethod string, bodyParams map[st
 	log.Println(req)
 	httpResp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer httpResp.Body.Close()
 	respBody, err := io.ReadAll(httpResp.Body)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	log.Println("Raw API Response:", string(respBody))
 
 	resp := &Response{}
 	err = json.Unmarshal(respBody, resp)
+	if err != nil {
+		log.Println("Error unmarshaling response:", err)
+		return nil, nil, err
+	}
+
+	// Log the full response
+	log.Printf("Lazada API Response: %+v\n", resp)
+
+	// 🔥 Special Handling for `/auth/token/create`
+	if apiPath == "/auth/token/create" {
+		var authResp LazadaAuthResponse
+		err = json.Unmarshal(respBody, &authResp)
+		if err != nil {
+			log.Println("Error unmarshaling LazadaAuthResponse:", err)
+		} else {
+			log.Printf("Parsed LazadaAuthResponse: %+v\n", authResp)
+			return nil, &authResp, nil
+		}
+	}
+
+	// 🔄 General Handling for Other API Responses
+	if len(resp.Data) > 0 {
+		var dataMap map[string]interface{} // Generic storage for unknown structure
+		err = json.Unmarshal(resp.Data, &dataMap)
+		if err != nil {
+			log.Println("Error unmarshaling 'data' field:", err)
+		} else {
+			log.Printf("Parsed 'data': %+v\n", dataMap)
+		}
+	}
 
 	lc.APIParams = nil
 	lc.FileParams = nil
 
-	return resp, err
+	return resp, nil, nil
+
 }

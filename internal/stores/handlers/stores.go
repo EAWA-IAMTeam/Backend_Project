@@ -30,7 +30,7 @@ func GenerateAccessToken(db *sql.DB, client *sdk.IopClient) echo.HandlerFunc {
 		client.AddAPIParam("code", authCode) // Set the authorization code dynamically
 
 		// Fetch seller details from Lazada API
-		resp, err := client.Execute("/auth/token/create", "GET", nil)
+		_, authResp, err := client.Execute("/auth/token/create", "GET", nil)
 		if err != nil {
 			log.Printf("Failed to fetch seller info from Lazada API: %v", err)
 			return c.JSON(http.StatusInternalServerError, map[string]string{
@@ -39,8 +39,8 @@ func GenerateAccessToken(db *sql.DB, client *sdk.IopClient) echo.HandlerFunc {
 		}
 
 		// Print response to the console
-		log.Printf("Lazada API Response: %+v", resp)
+		log.Printf("Lazada API Response: %+v", authResp)
 
-		return c.JSON(http.StatusOK, resp)
+		return c.JSON(http.StatusOK, authResp)
 	}
 }
