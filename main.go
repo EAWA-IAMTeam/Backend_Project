@@ -43,7 +43,7 @@ func main() {
 	// Create a new echo instance
 	e := echo.New()
 
-	e.GET("/lazada/link/store", handlers.GetStoreInfo(db, iopClient))
+	e.GET("/lazada/link/store", handlers.GenerateAccessToken(db, iopClient))
 
 	// Start the server
 	e.Logger.Fatal(e.Start(":8100"))

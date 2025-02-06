@@ -17,7 +17,7 @@ type AuthRequest struct {
 }
 
 // GetSellerInfo fetches seller information from Lazada API
-func GetStoreInfo(db *sql.DB, client *sdk.IopClient) echo.HandlerFunc {
+func GenerateAccessToken(db *sql.DB, client *sdk.IopClient) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		authCode := c.QueryParam("code") // Get the authorization code from the request
 
@@ -37,6 +37,9 @@ func GetStoreInfo(db *sql.DB, client *sdk.IopClient) echo.HandlerFunc {
 				"message": "Failed to fetch seller information",
 			})
 		}
+
+		// Print response to the console
+		log.Printf("Lazada API Response: %+v", resp)
 
 		return c.JSON(http.StatusOK, resp)
 	}

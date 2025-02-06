@@ -7,7 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"mime/multipart"
 	"net/http"
@@ -263,10 +263,13 @@ func (lc *IopClient) Execute(apiPath string, apiMethod string, bodyParams map[st
 		return nil, err
 	}
 	defer httpResp.Body.Close()
-	respBody, err := ioutil.ReadAll(httpResp.Body)
+	respBody, err := io.ReadAll(httpResp.Body)
 	if err != nil {
 		return nil, err
 	}
+
+	log.Println("Raw API Response:", string(respBody))
+
 	resp := &Response{}
 	err = json.Unmarshal(respBody, resp)
 
