@@ -43,7 +43,8 @@ func main() {
 	e.GET("/products/company/:company_id", productHandler.GetStockItemsByCompany)
 	e.GET("/products/store/:store_id", productHandler.GetProductsByStore)
 	e.POST("/products", productHandler.InsertProducts)
-	e.GET("/lazada/:store_id", productHandler.GetFilteredProducts)
+	e.GET("/products/lazada/mapped/:store_id", productHandler.GetMappedProducts)
+	e.GET("/products/lazada/unmapped/:store_id", productHandler.GetUnmappedProducts)
 
 	// Start server
 	port := "7000"

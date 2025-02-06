@@ -60,32 +60,6 @@ func (ps *ProductService) InsertProducts(req *models.ProductRequest) (*models.In
 	return ps.ProductRepo.InsertProductBatch(req.StoreID, req.Products)
 }
 
-// FetchFilteredProducts retrieves and processes filtered products
-func (ps *ProductService) FetchFilteredProducts(storeID string) (map[string]interface{}, error) {
-	// Fetch SKUs to remove from the database
-	skusToRemove, err := ps.ProductRepo.GetStoreSkus(storeID)
-	if err != nil {
-		log.Printf("Failed to fetch SKUs: %v", err)
-		return nil, fmt.Errorf("failed to retrieve SKU list")
-	}
-
-	// Initialize IOP client and Lazada API client
-	lazadaClient, err := ps.initLazadaClient()
-	if err != nil {
-		return nil, err
-	}
-
-	// Fetch prolazadaClient external API
-	resp, err := lazadaClient.Execute("/products/get", "GET", nil)
-	if err != nil {
-		log.Printf("Failed to fetch products from API: %v", err)
-		return nil, fmt.Errorf("failed to fetch products")
-	}
-
-	// Process API response and filter products
-	return ps.processApiResponse(resp, skusToRemove)
-}
-
 // initLazadaClient initializes and returns a Lazada API client
 func (ps *ProductService) initLazadaClient() (*sdk.IopClient, error) {
 	env := config.LoadConfig()
@@ -99,8 +73,52 @@ func (ps *ProductService) initLazadaClient() (*sdk.IopClient, error) {
 	return lazadaClient, nil
 }
 
-// processApiResponse filters products based on store SKUs
-func (ps *ProductService) processApiResponse(resp interface{}, skusToRemove map[string]bool) (map[string]interface{}, error) {
+// FetchUnmappedProducts retrieves products that are NOT mapped (still available in external API)
+func (ps *ProductService) FetchUnmappedProducts(storeID string) ([]models.Product, error) {
+	skusToRemove, err := ps.ProductRepo.GetStoreSkus(storeID)
+	if err != nil {
+		log.Printf("Failed to fetch SKUs: %v", err)
+		return nil, fmt.Errorf("failed to retrieve SKU list")
+	}
+
+	lazadaClient, err := ps.initLazadaClient()
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := lazadaClient.Execute("/products/get", "GET", nil)
+	if err != nil {
+		log.Printf("Failed to fetch products from API: %v", err)
+		return nil, fmt.Errorf("failed to fetch products")
+	}
+
+	return ps.filterUnmappedProducts(resp, skusToRemove)
+}
+
+// FetchMappedProducts retrieves products that are already mapped (removed from external API)
+func (ps *ProductService) FetchMappedProducts(storeID string) ([]models.Product, error) {
+	skusToRemove, err := ps.ProductRepo.GetStoreSkus(storeID)
+	if err != nil {
+		log.Printf("Failed to fetch SKUs: %v", err)
+		return nil, fmt.Errorf("failed to retrieve SKU list")
+	}
+
+	lazadaClient, err := ps.initLazadaClient()
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := lazadaClient.Execute("/products/get", "GET", nil)
+	if err != nil {
+		log.Printf("Failed to fetch products from API: %v", err)
+		return nil, fmt.Errorf("failed to fetch products")
+	}
+
+	return ps.filterMappedProducts(resp, skusToRemove)
+}
+
+// filterUnmappedProducts filters out products that are NOT mapped (available in external API)
+func (ps *ProductService) filterUnmappedProducts(resp interface{}, skusToRemove map[string]bool) ([]models.Product, error) {
 	responseBytes, err := json.Marshal(resp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal response: %v", err)
@@ -111,15 +129,13 @@ func (ps *ProductService) processApiResponse(resp interface{}, skusToRemove map[
 		return nil, fmt.Errorf("failed to unmarshal response: %v", err)
 	}
 
-	var unmappedProducts, mappedProducts []models.Product
+	var unmappedProducts []models.Product
 
 	for _, product := range apiResponse.Data.Products {
-		var remainingSkus, removedSkus []models.Sku
+		var remainingSkus []models.Sku
 
 		for _, sku := range product.Skus {
-			if skusToRemove[sku.ShopSku] {
-				removedSkus = append(removedSkus, sku)
-			} else {
+			if !skusToRemove[sku.ShopSku] {
 				remainingSkus = append(remainingSkus, sku)
 			}
 		}
@@ -128,6 +144,34 @@ func (ps *ProductService) processApiResponse(resp interface{}, skusToRemove map[
 			product.Skus = remainingSkus
 			unmappedProducts = append(unmappedProducts, product)
 		}
+	}
+
+	return unmappedProducts, nil
+}
+
+// filterMappedProducts filters out products that are MAPPED (removed from external API)
+func (ps *ProductService) filterMappedProducts(resp interface{}, skusToRemove map[string]bool) ([]models.Product, error) {
+	responseBytes, err := json.Marshal(resp)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal response: %v", err)
+	}
+
+	var apiResponse models.ApiResponse
+	if err := json.Unmarshal(responseBytes, &apiResponse); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal response: %v", err)
+	}
+
+	var mappedProducts []models.Product
+
+	for _, product := range apiResponse.Data.Products {
+		var removedSkus []models.Sku
+
+		for _, sku := range product.Skus {
+			if skusToRemove[sku.ShopSku] {
+				removedSkus = append(removedSkus, sku)
+			}
+		}
+
 		if len(removedSkus) > 0 {
 			productCopy := product
 			productCopy.Skus = removedSkus
@@ -135,8 +179,5 @@ func (ps *ProductService) processApiResponse(resp interface{}, skusToRemove map[
 		}
 	}
 
-	return map[string]interface{}{
-		"unmapped_products": unmappedProducts,
-		"mapped_products":   mappedProducts,
-	}, nil
+	return mappedProducts, nil
 }

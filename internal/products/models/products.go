@@ -1,6 +1,5 @@
 package models
 
-// Define product structure
 type Product struct {
 	ItemID     int      `json:"item_id"`
 	Images     []string `json:"images"` // List of product images
