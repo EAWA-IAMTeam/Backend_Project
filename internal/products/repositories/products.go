@@ -100,6 +100,7 @@ func (pr *ProductRepository) GetProductsByCompany(companyID int) ([]*models.Merg
 		if err != nil {
 			return nil, err
 		}
+		storeProduct.StockItemID = stockItem.StockItemID
 
 		if _, exists := stockItemsMap[stockItem.StockItemID]; !exists {
 			stockItemsMap[stockItem.StockItemID] = &stockItem
