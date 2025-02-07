@@ -73,6 +73,38 @@ func (ph *ProductHandler) InsertProducts(c echo.Context) error {
 	return c.JSON(statusCode, result)
 }
 
+// GetMappedProducts handles API requests for mapped products
+func (ph *ProductHandler) GetMappedProducts(c echo.Context) error {
+	companyID := c.Param("company_id")
+	if companyID == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"message": "company_id is required"})
+	}
+
+	products, err := ph.ProductService.FetchMappedProducts(companyID)
+	if err != nil {
+		log.Printf("Error fetching mapped products: %v", err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"message": "Failed to fetch mapped products"})
+	}
+
+	return c.JSON(http.StatusOK, products)
+}
+
+// GetUnmappedProducts handles API requests for mapped products
+func (ph *ProductHandler) GetUnmappedProducts(c echo.Context) error {
+	companyID := c.Param("company_id")
+	if companyID == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"message": "company_id is required"})
+	}
+
+	products, err := ph.ProductService.FetchUnmappedProducts(companyID)
+	if err != nil {
+		log.Printf("Error fetching mapped products: %v", err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"message": "Failed to fetch mapped products"})
+	}
+
+	return c.JSON(http.StatusOK, products)
+}
+
 // RemoveMappedProducts handles API requests to delete mapped products
 func (ph *ProductHandler) RemoveMappedProducts(c echo.Context) error {
 	storeID := c.Param("store_id")

@@ -3,6 +3,7 @@ package repositories
 import (
 	"backend_project/internal/products/models"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -76,7 +77,7 @@ func (pr *ProductRepository) GetProductsByCompany(companyID int) ([]*models.Merg
 	// Step 2: Fetch all store products based on store IDs
 	query := `
         SELECT si.id, si.ref_price, si.ref_cost, si.quantity,
-               sp.id, sp.price, sp.discounted_price, sp.sku, sp.currency, sp.status, sp.store_id
+               sp.id, sp.price, sp.discounted_price, sp.sku, sp.currency, sp.status, sp.store_id, sp.media_url
         FROM storeproduct sp
         JOIN stockitem si ON sp.stock_item_id = si.id
         WHERE sp.store_id = ANY($1)`
@@ -91,16 +92,28 @@ func (pr *ProductRepository) GetProductsByCompany(companyID int) ([]*models.Merg
 	for rows.Next() {
 		var stockItem models.MergeProduct
 		var storeProduct models.StoreProduct
+		var imageURLs string
 
 		err := rows.Scan(
 			&stockItem.StockItemID, &stockItem.RefPrice, &stockItem.RefCost, &stockItem.Quantity,
 			&storeProduct.ID, &storeProduct.Price, &storeProduct.DiscountedPrice, &storeProduct.SKU,
-			&storeProduct.Currency, &storeProduct.Status, &storeProduct.StoreID,
+			&storeProduct.Currency, &storeProduct.Status, &storeProduct.StoreID, &imageURLs,
 		)
 		if err != nil {
 			return nil, err
 		}
+
 		storeProduct.StockItemID = stockItem.StockItemID
+
+		// Unmarshal JSON string of image URLs into []string
+		if imageURLs != "" {
+			err = json.Unmarshal([]byte(imageURLs), &storeProduct.ImageURL)
+			if err != nil {
+				storeProduct.ImageURL = []string{} // Ensure it's an empty slice on error
+			}
+		} else {
+			storeProduct.ImageURL = []string{} // ✅ Set empty slice if imageURLs is empty
+		}
 
 		if _, exists := stockItemsMap[stockItem.StockItemID]; !exists {
 			stockItemsMap[stockItem.StockItemID] = &stockItem
@@ -120,7 +133,7 @@ func (pr *ProductRepository) GetProductsByCompany(companyID int) ([]*models.Merg
 
 
 // InsertProductBatch inserts multiple products into the database
-func (pr *ProductRepository) InsertProductBatch(storeID int64, products []models.StoreProduct) (*models.InsertResult, error) {
+func (pr *ProductRepository) InsertProductBatch(products []*models.StoreProduct) (*models.InsertResult, error) {
 	result := &models.InsertResult{
 		Inserted:   0,
 		Duplicates: make([]string, 0),
@@ -135,8 +148,8 @@ func (pr *ProductRepository) InsertProductBatch(storeID int64, products []models
 
 	// Prepare the insert statement
 	stmt, err := tx.Prepare(`
-        INSERT INTO storeproduct (store_id, stock_item_id, price, discounted_price, sku, currency, status)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        INSERT INTO storeproduct (store_id, stock_item_id, price, discounted_price, sku, currency, status, media_url)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
     `)
 	if err != nil {
 		return result, err
@@ -158,16 +171,24 @@ func (pr *ProductRepository) InsertProductBatch(storeID int64, products []models
 			continue
 		}
 
+		// Convert []string to JSON
+		mediaURLJSON, err := json.Marshal(product.ImageURL)
+		if err != nil {
+			return result, err
+		}
+
 		// Insert the product
 		res, err := stmt.Exec(
-			storeID,
+			product.StoreID,
 			product.StockItemID,
 			product.Price,
 			product.DiscountedPrice,
 			product.SKU,
 			product.Currency,
 			product.Status,
+			string(mediaURLJSON),
 		)
+
 		if err != nil {
 			return result, err
 		}
@@ -185,6 +206,37 @@ func (pr *ProductRepository) InsertProductBatch(storeID int64, products []models
 	}
 
 	return result, nil
+}
+
+// GetStoreByCompany fetches Store IDs for a given company from the database with platform as key
+func (r *ProductRepository) GetStoreByCompany(companyID string) (map[string][]int64, error) {
+	query := "SELECT id, platform FROM store WHERE company_id = $1"
+	rows, err := r.DB.Query(query, companyID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query database: %w", err)
+	}
+	defer rows.Close()
+
+	// Map to store platform-wise store IDs
+	storeMap := make(map[string][]int64)
+
+	for rows.Next() {
+		var id int64
+		var platform string
+		if err := rows.Scan(&id, &platform); err != nil {
+			return nil, fmt.Errorf("failed to scan row: %w", err)
+		}
+
+		// Append store ID to the appropriate platform list
+		storeMap[platform] = append(storeMap[platform], id)
+	}
+
+	// Check for iteration errors
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating rows: %w", err)
+	}
+
+	return storeMap, nil
 }
 
 // GetStoreSkus fetches SKUs for a given store from the database

@@ -21,14 +21,15 @@ type StockItem struct {
 }
 
 type StoreProduct struct {
-	ID              int64   `json:"id"`
-	StockItemID     int64   `json:"stock_item_id"`
-	Price           float64 `json:"price"`
-	DiscountedPrice float64 `json:"discounted_price"`
-	SKU             string  `json:"sku"`
-	Currency        string  `json:"currency"`
-	Status          string  `json:"status"`
-	StoreID         int64   `json:"store_id"`
+	ID              int64    `json:"id"`
+	StoreID         int64    `json:"store_id"`
+	StockItemID     int64    `json:"stock_item_id"`
+	Price           float64  `json:"price"`
+	DiscountedPrice float64  `json:"discounted_price"`
+	SKU             string   `json:"sku"`
+	Currency        string   `json:"currency"`
+	Status          string   `json:"status"`
+	ImageURL        []string `json:"image_url"`
 }
 
 type MergeProduct struct {
