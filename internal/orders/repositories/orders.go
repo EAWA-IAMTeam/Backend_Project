@@ -36,8 +36,6 @@ func (r *ordersRepository) FetchOrders(createdAfter string) (*models.OrdersData,
 		return nil, err
 	}
 
-	log.Println("Raw orders response:", string(resp.Data))
-
 	var apiResponse models.OrdersData
 	err = json.Unmarshal(resp.Data, &apiResponse)
 	if err != nil {

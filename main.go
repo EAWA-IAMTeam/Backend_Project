@@ -40,8 +40,12 @@ func main() {
 
 	// Set up the repository, service, and handler
 	ordersRepo := repositories.NewOrdersRepository(iopClient, env.AppKey, env.AccessToken)
+	itemListRepo := repositories.NewItemListRepository(iopClient, env.AppKey, env.AccessToken)
+
 	ordersService := services.NewOrdersService(ordersRepo)
-	ordersHandler := handlers.NewOrdersHandler(ordersService)
+	itemListService := services.NewItemListService(itemListRepo)
+
+	ordersHandler := handlers.NewOrdersHandler(ordersService, itemListService)
 
 	// Define API routes
 	e.GET("/orders", ordersHandler.GetOrders)
