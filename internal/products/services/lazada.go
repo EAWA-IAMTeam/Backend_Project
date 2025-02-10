@@ -23,7 +23,7 @@ func (ps *ProductService) initLazadaClient() (*sdk.IopClient, error) {
 }
 
 // FetchMappedProducts retrieves products that are already mapped (removed from external API)
-func (ps *ProductService) FetchLazadaMappedProducts(storeID string) ([]models.Product, error) {
+func (ps *ProductService) FetchLazadaMappedProducts(storeID int64) ([]models.Product, error) {
 	skusToRemove, err := ps.ProductRepo.GetStoreSkus(storeID)
 	if err != nil {
 		log.Printf("Failed to fetch SKUs: %v", err)
@@ -41,11 +41,11 @@ func (ps *ProductService) FetchLazadaMappedProducts(storeID string) ([]models.Pr
 		return nil, fmt.Errorf("failed to fetch products")
 	}
 
-	return ps.filterLazadaMappedProducts(resp, skusToRemove)
+	return ps.filterLazadaMappedProducts(resp, storeID, skusToRemove)
 }
 
 // filterMappedProducts filters out products that are MAPPED (removed from external API)
-func (ps *ProductService) filterLazadaMappedProducts(resp interface{}, skusToRemove map[string]bool) ([]models.Product, error) {
+func (ps *ProductService) filterLazadaMappedProducts(resp interface{}, storeID int64, skusToRemove map[string]bool) ([]models.Product, error) {
 	responseBytes, err := json.Marshal(resp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal response: %v", err)
@@ -61,6 +61,7 @@ func (ps *ProductService) filterLazadaMappedProducts(resp interface{}, skusToRem
 	for _, lazadaProduct := range apiResponse.Data.Products {
 		var product models.Product
 		product.ItemID = lazadaProduct.ItemID
+		product.StoreID = storeID
 		product.Name = lazadaProduct.Attributes.Name
 		product.Description = lazadaProduct.Attributes.Description
 		product.Images = lazadaProduct.Images
@@ -84,13 +85,15 @@ func (ps *ProductService) filterLazadaMappedProducts(resp interface{}, skusToRem
 
 
 // FetchUnmappedProducts retrieves products that are NOT mapped (still available in external API)
-func (ps *ProductService) FetchLazadaUnmappedProducts(storeID string) ([]models.Product, error) {
+func (ps *ProductService) FetchLazadaUnmappedProducts(storeID int64) ([]models.Product, error) {
 	skusToRemove, err := ps.ProductRepo.GetStoreSkus(storeID)
 	if err != nil {
 		log.Printf("Failed to fetch SKUs: %v", err)
 		return nil, fmt.Errorf("failed to retrieve SKU list")
 	}
 
+	// TODO: Need to change the access token according to storeID to fetch the products of the store
+	// TODO: Need to store the access token in the database
 	lazadaClient, err := ps.initLazadaClient()
 	if err != nil {
 		return nil, err
@@ -102,11 +105,11 @@ func (ps *ProductService) FetchLazadaUnmappedProducts(storeID string) ([]models.
 		return nil, fmt.Errorf("failed to fetch products")
 	}
 
-	return ps.filterLazadaUnmappedProducts(resp, skusToRemove)
+	return ps.filterLazadaUnmappedProducts(resp, storeID, skusToRemove)
 }
 
 // filterUnmappedProducts filters out products that are NOT mapped (available in external API)
-func (ps *ProductService) filterLazadaUnmappedProducts(resp interface{}, skusToRemove map[string]bool) ([]models.Product, error) {
+func (ps *ProductService) filterLazadaUnmappedProducts(resp interface{}, storeID int64, skusToRemove map[string]bool) ([]models.Product, error) {
 	responseBytes, err := json.Marshal(resp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal response: %v", err)
@@ -122,6 +125,7 @@ func (ps *ProductService) filterLazadaUnmappedProducts(resp interface{}, skusToR
 	for _, lazadaProduct := range apiResponse.Data.Products {
 		var product models.Product
 		product.ItemID = lazadaProduct.ItemID
+		product.StoreID = storeID
 		product.Name = lazadaProduct.Attributes.Name
 		product.Description = lazadaProduct.Attributes.Description
 		product.Images = lazadaProduct.Images
