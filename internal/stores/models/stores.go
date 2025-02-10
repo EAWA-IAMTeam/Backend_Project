@@ -7,6 +7,7 @@ type Store struct {
 	ID            int64
 	CompanyID     int64
 	AccessTokenID int64
+	ExpiryTime    string
 	Name          string
 	Platform      string
 	Region        string
@@ -31,12 +32,4 @@ type AccessToken struct {
 	AccessToken  string `json:"access_token"`
 	RefreshToken string `json:"refresh_token"`
 	Platform     string `json:"platform"`
-}
-
-// lazada store info
-type LazadaStoreInfo struct {
-	AccessToken  string `json:"access_token"`
-	Refreshtoken string `json:"refresh_token"`
-	Platform     string `json:"account_platform"`
-	Region       string `json:"country"`
 }

@@ -1,6 +1,7 @@
 package sdk
 
 import (
+	"backend_project/internal/stores/models"
 	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
@@ -165,7 +166,7 @@ type Response struct {
 	Type      string          `json:"type"`
 	Message   string          `json:"message"`
 	RequestID string          `json:"request_id"`
-	Data      json.RawMessage `json:"data,onitempty"`
+	Data      json.RawMessage `json:"data"`
 }
 
 // ResponseError defines a error response
@@ -174,18 +175,6 @@ type ResponseError struct {
 	Type      string `json:"type"`
 	Message   string `json:"message"`
 	RequestID string `json:"request_id"`
-}
-
-type LazadaAuthResponse struct {
-	AccessToken      string `json:"access_token"`
-	Country          string `json:"country"`
-	RefreshToken     string `json:"refresh_token"`
-	AccountPlatform  string `json:"account_platform"`
-	ExpiresIn        int    `json:"expires_in"`
-	RefreshExpiresIn int    `json:"refresh_expires_in"`
-	Account          string `json:"account"`
-	Code             string `json:"code"`
-	RequestID        string `json:"request_id"`
 }
 
 func (lc *IopClient) getServerURL() string {
@@ -207,7 +196,7 @@ func (lc *IopClient) getServerURL() string {
 }
 
 // Execute sends the request though http.request and collect the response
-func (lc *IopClient) Execute(apiPath string, apiMethod string, bodyParams map[string]string) (*Response, *LazadaAuthResponse, error) {
+func (lc *IopClient) Execute(apiPath string, apiMethod string, bodyParams map[string]string) (*Response, *models.ApiResponseAccessToken, error) {
 	var req *http.Request
 	var err error
 	var contentType string
@@ -294,24 +283,13 @@ func (lc *IopClient) Execute(apiPath string, apiMethod string, bodyParams map[st
 
 	// 🔥 Special Handling for `/auth/token/create`
 	if apiPath == "/auth/token/create" {
-		var authResp LazadaAuthResponse
+		var authResp models.ApiResponseAccessToken
 		err = json.Unmarshal(respBody, &authResp)
 		if err != nil {
 			log.Println("Error unmarshaling LazadaAuthResponse:", err)
 		} else {
 			log.Printf("Parsed LazadaAuthResponse: %+v\n", authResp)
 			return nil, &authResp, nil
-		}
-	}
-
-	// 🔄 General Handling for Other API Responses
-	if len(resp.Data) > 0 {
-		var dataMap map[string]interface{} // Generic storage for unknown structure
-		err = json.Unmarshal(resp.Data, &dataMap)
-		if err != nil {
-			log.Println("Error unmarshaling 'data' field:", err)
-		} else {
-			log.Printf("Parsed 'data': %+v\n", dataMap)
 		}
 	}
 
