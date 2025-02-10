@@ -18,9 +18,15 @@ func NewItemListService(repo repositories.ItemListRepository) ItemListService {
 }
 
 func (s *itemListService) GetItemList(orderIDs []string) ([]models.Item, error) {
-	items, err := s.repo.FetchItemList(orderIDs)
+	orderItems, err := s.repo.FetchItemList(orderIDs)
 	if err != nil {
 		return nil, err
 	}
+
+	items := make([]models.Item, 0)
+	for _, orderItem := range orderItems {
+		items = append(items, orderItem.OrderItems...)
+	}
+
 	return items, nil
 }

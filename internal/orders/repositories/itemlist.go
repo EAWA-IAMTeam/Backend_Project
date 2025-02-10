@@ -10,7 +10,7 @@ import (
 )
 
 type ItemListRepository interface {
-	FetchItemList(orderIDs []string) ([]models.Item, error)
+	FetchItemList(orderIDs []string) ([]models.OrderItem, error)
 }
 
 type itemListRepository struct {
@@ -23,7 +23,7 @@ func NewItemListRepository(client *sdk.IopClient, appKey, accessToken string) It
 	return &itemListRepository{client, appKey, accessToken}
 }
 
-func (r *itemListRepository) FetchItemList(orderIDs []string) ([]models.Item, error) {
+func (r *itemListRepository) FetchItemList(orderIDs []string) ([]models.OrderItem, error) {
 	if len(orderIDs) == 0 {
 		return nil, errors.New("no order IDs provided")
 	}
@@ -43,14 +43,15 @@ func (r *itemListRepository) FetchItemList(orderIDs []string) ([]models.Item, er
 		return nil, err
 	}
 
-	// Log the raw response data
 	// log.Printf("Raw response from API: %s", string(resp.Data))
 
-	var items []models.Item
-	err = json.Unmarshal(resp.Data, &items)
+	// Assuming the response is a JSON array of order items
+	var orderItems []models.OrderItem
+	err = json.Unmarshal(resp.Data, &orderItems)
 	if err != nil {
 		log.Println("Error unmarshalling JSON:", err)
 		return nil, errors.New("failed to parse item list")
 	}
-	return items, nil
+
+	return orderItems, nil
 }

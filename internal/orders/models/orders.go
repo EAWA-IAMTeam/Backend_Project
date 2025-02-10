@@ -36,6 +36,7 @@ type Order struct {
 	GiftMessage                 string   `json:"gift_message"`
 	AddressBilling              Address  `json:"address_billing"`
 	AddressShipping             Address  `json:"address_shipping"`
+	Items                       []Item   `json:"items"`
 }
 
 // platform_discount (order)

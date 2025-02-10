@@ -42,8 +42,8 @@ func main() {
 	ordersRepo := repositories.NewOrdersRepository(iopClient, env.AppKey, env.AccessToken)
 	itemListRepo := repositories.NewItemListRepository(iopClient, env.AppKey, env.AccessToken)
 
-	ordersService := services.NewOrdersService(ordersRepo)
 	itemListService := services.NewItemListService(itemListRepo)
+	ordersService := services.NewOrdersService(ordersRepo, itemListService)
 
 	ordersHandler := handlers.NewOrdersHandler(ordersService, itemListService)
 
