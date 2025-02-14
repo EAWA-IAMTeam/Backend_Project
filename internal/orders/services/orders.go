@@ -8,7 +8,8 @@ import (
 )
 
 type OrdersService interface {
-	GetOrders(createdAfter string) ([]models.Order, error)
+	GetOrders(createdAfter string, offset int, limit int, status string) ([]models.Order, error)
+	SaveOrder(order *models.Order, companyID string) error
 }
 
 type ordersService struct {
@@ -20,8 +21,8 @@ func NewOrdersService(repo repositories.OrdersRepository, itemListService ItemLi
 	return &ordersService{repo, itemListService}
 }
 
-func (s *ordersService) GetOrders(createdAfter string) ([]models.Order, error) {
-	ordersData, err := s.repo.FetchOrders(createdAfter)
+func (s *ordersService) GetOrders(createdAfter string, offset int, limit int, status string) ([]models.Order, error) {
+	ordersData, err := s.repo.FetchOrders(createdAfter, offset, limit, status)
 	if err != nil {
 		return nil, err
 	}
@@ -50,9 +51,12 @@ func (s *ordersService) GetOrders(createdAfter string) ([]models.Order, error) {
 				ordersData.Orders[i].Items = append(ordersData.Orders[i].Items, item)
 			}
 		}
-
 	}
 
 	log.Printf("Parsed orders count: %d\n", len(ordersData.Orders))
 	return ordersData.Orders, nil
+}
+
+func (s *ordersService) SaveOrder(order *models.Order, companyID string) error {
+	return s.repo.SaveOrder(order, companyID)
 }

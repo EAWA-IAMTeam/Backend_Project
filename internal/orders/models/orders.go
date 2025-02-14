@@ -34,7 +34,6 @@ type Order struct {
 	ExtraAttributes             string   `json:"extra_attributes"`
 	Remarks                     string   `json:"remarks"`
 	GiftMessage                 string   `json:"gift_message"`
-	AddressBilling              Address  `json:"address_billing"`
 	AddressShipping             Address  `json:"address_shipping"`
 	Items                       []Item   `json:"items"`
 }
@@ -61,3 +60,25 @@ type Address struct {
 	FirstName string `json:"first_name"`
 	Phone     string `json:"phone"`
 }
+
+// type OrderData struct {
+// 	CustomerName string `json:"first_name"`
+// 	CustomerPhone string `json:"phone"`
+// 	CustomerAddress string `json:"address1"`
+// 	CourierService string `json:"shipping_provider_type"`
+// 	TransactionFee float64 `json:"transaction_fee"`
+// 	ShippingFee float64 `json:"shipping_fee"`
+// 	ProcessFee float64 `json:"process_fee"`
+// 	ServiceFee float64 `json:"service_fee"`
+// 	SellerDiscount float64 `json:"seller_discount"`
+// 	PlatformDiscount float64 `json:"platform_discount"`
+// 	ShippingFeeDiscountSeller float64 `json:"shipping_fee_discount_seller"`
+// 	TotalPrice float64 `json:"price"`
+// 	Currency string `json:"currency"`
+// 	//Platform string `json:"platform"` (set via prefix)
+// 	//Store string `json:"store"` (set via prefix)
+// 	//PlatformReleasedAmount float64 `json:"platform_released_amount"` //payment
+// 	//TotalReleasedAmount float64 `json:"total_released_amount"` //payment
+// 	RefundAmount float64 `json:"refund_amount"`
+
+// }

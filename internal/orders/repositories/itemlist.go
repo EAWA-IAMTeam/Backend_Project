@@ -3,6 +3,7 @@ package repositories
 import (
 	"backend_project/internal/orders/models"
 	"backend_project/sdk"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"log"
@@ -17,10 +18,11 @@ type itemListRepository struct {
 	client      *sdk.IopClient
 	appKey      string
 	accessToken string
+	DB          *sql.DB
 }
 
-func NewItemListRepository(client *sdk.IopClient, appKey, accessToken string) ItemListRepository {
-	return &itemListRepository{client, appKey, accessToken}
+func NewItemListRepository(client *sdk.IopClient, appKey, accessToken string, db *sql.DB) ItemListRepository {
+	return &itemListRepository{client, appKey, accessToken, db}
 }
 
 func (r *itemListRepository) FetchItemList(orderIDs []string) ([]models.OrderItem, error) {

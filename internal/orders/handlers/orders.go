@@ -1,9 +1,12 @@
 package handlers
 
 import (
+	"backend_project/internal/orders/models"
 	"backend_project/internal/orders/services"
 	"fmt"
 	"net/http"
+
+	"log"
 
 	"github.com/labstack/echo/v4"
 )
@@ -18,26 +21,72 @@ func NewOrdersHandler(ordersService services.OrdersService, itemListService serv
 }
 
 func (h *OrdersHandler) GetOrders(c echo.Context) error {
+	companyID := c.Param("company_id")
+	if companyID == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"message": "Company ID is required"})
+	}
+
+	status := c.Param("status")
+	// No need to check if status is empty, as it's optional
+
 	createdAfter := c.QueryParam("created_after")
 	if createdAfter == "" {
-		createdAfter = "2025-02-01T22:44:30+08:00"
+		createdAfter = "2024-02-01T22:44:30+08:00"
 	}
 
-	orders, err := h.ordersService.GetOrders(createdAfter)
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]string{
-			"message": "Failed to retrieve orders",
-			"error":   err.Error(),
-		})
+	var allOrders []models.Order
+	offset := 0
+	limit := 100      // API's maximum limit per call
+	totalLimit := 200 // Your internal limit for the operation
+
+	for len(allOrders) < totalLimit {
+		orders, err := h.ordersService.GetOrders(createdAfter, offset, limit, status)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{
+				"message": "Failed to retrieve orders",
+				"error":   err.Error(),
+			})
+		}
+
+		if len(orders) == 0 {
+			break // No more orders to fetch
+		}
+
+		allOrders = append(allOrders, orders...)
+		offset += limit // Move to the next set of orders
+
+		if len(allOrders) >= totalLimit {
+			allOrders = allOrders[:totalLimit] // Ensure not to exceed 500 orders
+			break
+		}
 	}
 
-	if len(orders) == 0 {
+	if len(allOrders) == 0 {
 		return c.JSON(http.StatusOK, map[string]string{"message": "No orders found"})
+	}
+
+	// Save each order from the retrieved list, adding a placeholder for those with no items
+	for _, order := range allOrders {
+		if len(order.Items) == 0 {
+			placeholderItem := models.Item{
+				Name: "No Item",
+				// Add other necessary fields with default values
+			}
+			order.Items = append(order.Items, placeholderItem)
+		}
+
+		err := h.ordersService.SaveOrder(&order, companyID)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{
+				"message": fmt.Sprintf("Failed to save order with ID %d", order.OrderID),
+				"error":   err.Error(),
+			})
+		}
 	}
 
 	// Extract order IDs
 	var orderIDs []string
-	for _, order := range orders {
+	for _, order := range allOrders {
 		orderIDs = append(orderIDs, fmt.Sprintf("%d", order.OrderID))
 	}
 
@@ -49,6 +98,7 @@ func (h *OrdersHandler) GetOrders(c echo.Context) error {
 		}
 		batch := orderIDs[i:end]
 
+		log.Printf("Processing batch of order IDs: %v", batch) // Debugging statement
 		_, err := h.itemListService.GetItemList(batch)
 		if err != nil {
 			return c.JSON(http.StatusInternalServerError, map[string]string{
@@ -58,5 +108,5 @@ func (h *OrdersHandler) GetOrders(c echo.Context) error {
 		}
 	}
 
-	return c.JSON(http.StatusOK, orders)
+	return c.JSON(http.StatusOK, allOrders)
 }

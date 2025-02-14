@@ -1,12 +1,13 @@
 package main
 
 import (
+	"backend_project/database"
 	"backend_project/internal/config"
 	"backend_project/internal/orders/handlers"
 	"backend_project/internal/orders/repositories"
 	"backend_project/internal/orders/services"
 	"backend_project/sdk"
-	"database/sql"
+	"fmt"
 	"log"
 
 	"github.com/labstack/echo/v4"
@@ -14,6 +15,18 @@ import (
 )
 
 func main() {
+	db, err := database.ConnectDB()
+	if err != nil {
+		log.Fatalf("Failed to connect to the database: %v", err)
+	}
+	defer db.Close()
+
+	// Test database connection
+	if err = db.Ping(); err != nil {
+		log.Fatalf("Failed to connect to the database: %v", err)
+	} else {
+		fmt.Println("Connected to the database successfully!")
+	}
 	// Load environment variables from .env file
 	env := config.LoadConfig()
 
@@ -29,18 +42,9 @@ func main() {
 	// Initialize Echo server
 	e := echo.New()
 
-	// Initialize PostgreSQL database connection
-	dbConnStr := "user=" + env.DbUser + " dbname=" + env.DbName + " sslmode=disable"
-	db, err := sql.Open("postgres", dbConnStr)
-	if err != nil {
-		log.Fatalf("Failed to connect to the database: %v", err)
-	}
-
-	defer db.Close()
-
 	// Set up the repository, service, and handler
-	ordersRepo := repositories.NewOrdersRepository(iopClient, env.AppKey, env.AccessToken)
-	itemListRepo := repositories.NewItemListRepository(iopClient, env.AppKey, env.AccessToken)
+	ordersRepo := repositories.NewOrdersRepository(iopClient, env.AppKey, env.AccessToken, db)
+	itemListRepo := repositories.NewItemListRepository(iopClient, env.AppKey, env.AccessToken, db)
 
 	itemListService := services.NewItemListService(itemListRepo)
 	ordersService := services.NewOrdersService(ordersRepo, itemListService)
@@ -48,7 +52,7 @@ func main() {
 	ordersHandler := handlers.NewOrdersHandler(ordersService, itemListService)
 
 	// Define API routes
-	e.GET("/orders", ordersHandler.GetOrders)
+	e.GET("/orders/:company_id/:status", ordersHandler.GetOrders)
 
 	// Start the server on IP 192.168.0.240 and port 8080
 	serverAddr := "192.168.0.240:8080"
