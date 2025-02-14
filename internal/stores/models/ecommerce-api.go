@@ -26,7 +26,7 @@ type ApiResponseStoreInfo struct {
 	Verified            bool   `json:"verified"`
 	Location            string `json:"location"`
 	MarketPlaceEaseMode bool   `json:"marketplaceEaseMode"`
-	SellerID            int    `json:"seller_id"`
+	SellerID            int64  `json:"seller_id"`
 	Email               string `json:"email"`
 	ShortCode           string `json:"short_code"`
 	CB                  bool   `json:"cb"`     // Cross Border seller

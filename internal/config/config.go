@@ -37,7 +37,7 @@ func LoadConfig() *Config {
 		AccessToken: getEnv("Access_Token", ""),
 	}
 
-	log.Printf("Loaded Config: %+v\n", config) // Debugging line
+	// log.Printf("Loaded Config: %+v\n", config)
 
 	return config
 
