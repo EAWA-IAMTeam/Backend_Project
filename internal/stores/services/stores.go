@@ -6,21 +6,21 @@ import (
 	"fmt"
 )
 
-type StoreService interface {
-	FetchStoreInfo(authCode string) (interface{}, error)
-}
+// type StoreService interface {
+// 	FetchStoreInfo(authCode string) (interface{}, error)
+// }
 
-type storeService struct {
+type StoreService struct {
 	// *Service
 	storerepository *repositories.StoreRepository
 	iopClient       *sdk.IopClient
 }
 
-func NewStoreService(sr *repositories.StoreRepository, client *sdk.IopClient) StoreService {
-	return &storeService{sr, client}
+func NewStoreService(sr *repositories.StoreRepository, client *sdk.IopClient) *StoreService {
+	return &StoreService{sr, client}
 }
 
-func (ss *storeService) FetchStoreInfo(authCode string) (interface{}, error) {
+func (ss *StoreService) FetchStoreInfo(authCode string) (interface{}, error) {
 	// Step 1: Exchange auth code for an access token
 	ss.iopClient.AddAPIParam("code", authCode)
 

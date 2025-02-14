@@ -13,10 +13,10 @@ type StoreHandler interface {
 
 type storeHandler struct {
 	// *Handler [logger]
-	storeService services.StoreService
+	storeService *services.StoreService
 }
 
-func NewStoreHandler(ss services.StoreService) StoreHandler {
+func NewStoreHandler(ss *services.StoreService) StoreHandler {
 	return &storeHandler{storeService: ss}
 }
 
