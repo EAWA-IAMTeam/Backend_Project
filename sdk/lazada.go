@@ -231,7 +231,6 @@ func (lc *IopClient) Execute(apiPath string, apiMethod string, bodyParams map[st
 				lc.AddAPIParam(k, v)
 				_ = writer.WriteField(k, v)
 			}
-
 		}
 
 		if err = writer.Close(); err != nil {
@@ -289,7 +288,7 @@ func (lc *IopClient) Execute(apiPath string, apiMethod string, bodyParams map[st
 			log.Println("Error unmarshaling LazadaAuthResponse:", err)
 		} else {
 			log.Printf("Parsed LazadaAuthResponse: %+v\n", authResp)
-			return nil, &authResp, nil
+			return resp, &authResp, nil
 		}
 	}
 
@@ -297,5 +296,4 @@ func (lc *IopClient) Execute(apiPath string, apiMethod string, bodyParams map[st
 	lc.FileParams = nil
 
 	return resp, nil, nil
-
 }

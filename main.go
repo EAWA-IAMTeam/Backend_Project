@@ -2,19 +2,15 @@ package main
 
 import (
 	"backend_project/database"
-	"backend_project/internal/config"
 	"backend_project/internal/stores/handlers"
 	"backend_project/internal/stores/repositories"
 	"backend_project/internal/stores/services"
-	"backend_project/sdk"
 	"log"
 
 	"github.com/labstack/echo"
 )
 
 func main() {
-	// Load configuration
-	env := config.LoadConfig()
 
 	// Connect to the database
 	db, err := database.ConnectDB()
@@ -23,17 +19,9 @@ func main() {
 	}
 	defer db.Close()
 
-	// Initialize Lazada SDK client
-	clientOptions := sdk.ClientOptions{
-		APIKey:    env.AppKey,
-		APISecret: env.AppSecret,
-		Region:    "MY",
-	}
-	iopClient := sdk.NewClient(&clientOptions)
-
 	// Initialize repository, service layers and handlers
 	storeRepo := repositories.NewStoreRepository(db)
-	storeService := services.NewStoreService(storeRepo, iopClient)
+	storeService := services.NewStoreService(storeRepo)
 	storeHandler := handlers.NewStoreHandler(storeService)
 
 	// Create a new echo instance

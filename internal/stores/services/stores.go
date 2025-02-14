@@ -2,7 +2,6 @@ package services
 
 import (
 	"backend_project/internal/stores/repositories"
-	"backend_project/sdk"
 	"fmt"
 )
 
@@ -31,12 +30,11 @@ import (
 
 type StoreService struct {
 	// *Service
-	storerepository *repositories.StoreRepository
-	iopClient       *sdk.IopClient
+	Storerepository *repositories.StoreRepository
 }
 
-func NewStoreService(sr *repositories.StoreRepository, client *sdk.IopClient) *StoreService {
-	return &StoreService{sr, client}
+func NewStoreService(sr *repositories.StoreRepository) *StoreService {
+	return &StoreService{Storerepository: sr}
 }
 
 func (ss *StoreService) FetchStoreInfo(authCode string) (interface{}, error) {
@@ -45,15 +43,15 @@ func (ss *StoreService) FetchStoreInfo(authCode string) (interface{}, error) {
 		return nil, fmt.Errorf("failed to generate access token: %v", err)
 	}
 
-	storeInfo, err := ss.LazadaFetchStoreInfo(accessToken)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch store info: %v", err)
-	}
+	// storeInfo, err := ss.LazadaFetchStoreInfo(accessToken)
+	// if err != nil {
+	// 	return nil, fmt.Errorf("failed to fetch store info: %v", err)
+	// }
 
-	err = ss.storerepository.SaveStoreInfo(storeInfo)
-	if err != nil {
-		return nil, fmt.Errorf("failed to save store info: %v", err)
-	}
+	// err = ss.Storerepository.SaveStoreInfo(storeInfo)
+	// if err != nil {
+	// 	return nil, fmt.Errorf("failed to save store info: %v", err)
+	// }
 
-	return storeInfo, nil
+	return accessToken, nil
 }
