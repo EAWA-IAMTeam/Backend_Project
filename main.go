@@ -1,9 +1,12 @@
-package main
+package middleware
 
 import (
 	"backend_project/database"
+	"backend_project/internal/middleware/handlers"
 	"fmt"
 	"log"
+
+	"github.com/labstack/echo/v4"
 )
 
 func main() {
@@ -22,4 +25,13 @@ func main() {
 	}
 
 	defer db.Close()
+
+	e := echo.New()
+
+	e.POST("/api", handlers.HandlePostRequest)
+	e.GET("/api", handlers.HandleGetRequest)
+
+	// Start server
+	log.Println("🚀 Middleware running on :8081")
+	e.Logger.Fatal(e.Start(":8081"))
 }
