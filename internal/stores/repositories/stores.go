@@ -86,17 +86,20 @@ func (sr *storeRepository) SaveStore(store *models.Store) error {
 
 func (sr *storeRepository) SaveAccessToken(accessToken *models.AccessToken) error {
 	query := `
-	INSERT INTO accessToken (id, account_id, store_id, access_token, refresh_token, platform) 
-	VALUES ($1, $2, $3, $4, $5, $6)`
-	_, err := sr.DB.Exec(query,
-		accessToken.ID,
+	INSERT INTO accessToken (account_id, store_id, access_token, refresh_token, platform) 
+	VALUES ($1, $2, $3, $4, $5) 
+	RETURNING id`
+
+	err := sr.DB.QueryRow(query,
 		accessToken.AccountID,
 		accessToken.StoreID,
 		accessToken.AccessToken,
 		accessToken.RefreshToken,
-		accessToken.Platform)
+		accessToken.Platform,
+	).Scan(&accessToken.ID)
+
 	if err != nil {
-		return fmt.Errorf("failed to save access token: %v", err)
+		return fmt.Errorf("failed to save access token and get ID: %v", err)
 	}
 	return nil
 }

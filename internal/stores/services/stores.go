@@ -29,6 +29,7 @@ Importance:
 Problem Facing:
 1. how to receive company id? pass on body?
 2. The store expiry time issues [need to be in timestampz]
+3. accessToken ID set in autoincrement or backend set ourself.
 */
 
 type StoreService interface {
@@ -44,39 +45,33 @@ func NewStoreService(sr repositories.StoreRepository) StoreService {
 }
 
 func (ss *storeService) FetchStoreInfo(authCode string) (interface{}, error) {
-	// Step 1: Generate access token
 	linkStore, err := ss.LazadaGenerateAccessToken(authCode)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate access token: %v", err)
 	}
 
-	// Step 2: Fetch store info using the access token
 	storeInfo, err := ss.LazadaFetchStoreInfo(linkStore.AccessToken)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch store info: %v", err)
 	}
 
-	// Step 4: Check if user_id and seller_id are the same
 	isMain := linkStore.UserID == linkStore.SellerID
 
-	// Step 5: Check if the user_id already exists in the database
 	existingAccount, err := ss.storeRepository.GetAccountByUserID("Lazada" + linkStore.UserID)
 	if err != nil {
-		// Log the error and assume the account does not exist
 		log.Printf("Warning: failed to check existing account: %v. Proceeding to create a new account.", err)
 		existingAccount = nil
 	}
 
 	var accountID string
 	if existingAccount == nil {
-		// Step 6: Create a new record in the account table if it doesn't exist
 		account := &models.Account{
-			ID:        "Lazada" + linkStore.UserID, // Generate ID with prefix
-			CompanyID: 0,                           // Set the appropriate company ID
-			Name:      storeInfo.Name,              // Use store name as account name
-			Platform:  "Lazada",                    // Set platform
-			Region:    linkStore.Country,           // Set region
-			IsMain:    isMain,                      // Set isMain based on user_id and seller_id
+			ID:        "Lazada" + linkStore.UserID,
+			CompanyID: 0,
+			Name:      linkStore.Account,
+			Platform:  "Lazada",
+			Region:    linkStore.Country,
+			IsMain:    isMain,
 		}
 
 		err = ss.storeRepository.SaveAccount(account)
@@ -89,16 +84,15 @@ func (ss *storeService) FetchStoreInfo(authCode string) (interface{}, error) {
 		accountID = existingAccount.ID
 	}
 
-	// Step 6: Create a new record in the store table
 	store := &models.Store{
-		ID:            "Lazada" + linkStore.SellerID, // Generate ID with prefix
-		CompanyID:     0,                             // Set the appropriate company ID
-		AccessTokenID: 0,                             // Will be set after saving the access token
-		// ExpiryTime:    "",                            // Set the expiry time (if available)
+		ID:            "Lazada" + linkStore.SellerID,
+		CompanyID:     0,
+		AccessTokenID: 0,
+		// ExpiryTime:    "",
 		Name:         storeInfo.Name,
 		Platform:     "Lazada",
 		Region:       linkStore.Country,
-		Descriptions: "", // Set description if available
+		Descriptions: "",
 		Status:       true,
 	}
 
@@ -107,7 +101,6 @@ func (ss *storeService) FetchStoreInfo(authCode string) (interface{}, error) {
 		return nil, fmt.Errorf("failed to save store: %v", err)
 	}
 
-	// Step 6: Insert access token info into the accessToken table
 	accessToken := &models.AccessToken{
 		ID:           0, // Auto-incremented ID (if applicable)
 		AccountID:    accountID,
@@ -122,7 +115,6 @@ func (ss *storeService) FetchStoreInfo(authCode string) (interface{}, error) {
 		return nil, fmt.Errorf("failed to save access token: %v", err)
 	}
 
-	// Update the store with the access token ID
 	store.AccessTokenID = accessToken.ID
 	err = ss.storeRepository.UpdateStore(store)
 	if err != nil {
