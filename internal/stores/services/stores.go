@@ -30,6 +30,10 @@ Problem Facing:
 1. how to receive company id? pass on body?
 2. The store expiry time issues [need to be in timestampz]
 3. accessToken ID set in autoincrement or backend set ourself.
+
+*Other features
+1. getAllStores by company_id
+2. change status to inactive (?
 */
 
 type StoreService interface {
