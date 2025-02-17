@@ -1,6 +1,19 @@
 package models
 
-//Lazada struct
+// From ApiResponseAccessToken transform into LinkStore format
+type LinkStore struct {
+	AccessToken      string `json:"access_token"`
+	ExpiresIn        int    `json:"expires_in"`
+	RefreshToken     string `json:"refresh_token"`
+	RefreshExpiresIn int    `json:"refresh_expires_in"`
+	Country          string `json:"country"`
+	UserID           string `json:"user_id"`
+	SellerID         string `json:"seller_id"`
+	Account          string `json:"account"`
+	ShortCode        string `json:"short_code"`
+}
+
+// Lazada struct
 type ApiResponseAccessToken struct {
 	AccessToken      string     `json:"access_token"`
 	Country          string     `json:"country"`

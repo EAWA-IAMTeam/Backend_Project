@@ -38,12 +38,13 @@ func NewStoreService(sr repositories.StoreRepository) StoreService {
 }
 
 func (ss *storeService) FetchStoreInfo(authCode string) (interface{}, error) {
-	accessToken, err := ss.LazadaGenerateAccessToken(authCode)
+
+	resp, err := ss.LazadaGenerateAccessToken(authCode)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate access token: %v", err)
 	}
 
-	storeInfo, err := ss.LazadaFetchStoreInfo(accessToken)
+	storeInfo, err := ss.LazadaFetchStoreInfo(resp.AccessToken)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch store info: %v", err)
 	}
