@@ -9,7 +9,7 @@ import (
 )
 
 // initLazadaClient initializes and returns a Lazada API client
-func (ss *StoreService) initLazadaClient() (*sdk.IopClient, error) {
+func (ss storeService) initLazadaClient() (*sdk.IopClient, error) {
 	env := config.LoadConfig()
 	clientOptions := sdk.ClientOptions{
 		APIKey:    env.AppKey,
@@ -20,7 +20,7 @@ func (ss *StoreService) initLazadaClient() (*sdk.IopClient, error) {
 	return lazadaClient, nil
 }
 
-func (ss *StoreService) LazadaGenerateAccessToken(authCode string) (string, error) {
+func (ss storeService) LazadaGenerateAccessToken(authCode string) (string, error) {
 	lazadaClient, err := ss.initLazadaClient()
 	if err != nil {
 		return "", err
@@ -40,14 +40,10 @@ func (ss *StoreService) LazadaGenerateAccessToken(authCode string) (string, erro
 		return "", fmt.Errorf("lazada API Error: %s - %s", resp.Code, resp.Message)
 	}
 
-	if authResp == nil {
-		return "", fmt.Errorf("failed to parse Lazada auth response")
-	}
-
 	return authResp.AccessToken, nil
 }
 
-func (ss *StoreService) LazadaFetchStoreInfo(accessToken string) (interface{}, error) {
+func (ss storeService) LazadaFetchStoreInfo(accessToken string) (interface{}, error) {
 
 	lazadaClient, err := ss.initLazadaClient()
 	if err != nil {

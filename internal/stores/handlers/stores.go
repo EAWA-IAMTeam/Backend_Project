@@ -7,27 +7,26 @@ import (
 	"github.com/labstack/echo"
 )
 
-// type StoreHandler interface {
-// 	LazadaLinkStore(ctx echo.Context) error
-// }
-
-type StoreHandler struct {
-	// *Handler [logger]
-	StoreService *services.StoreService
+type StoreHandler interface {
+	LazadaLinkStore(ctx echo.Context) error
 }
 
-func NewStoreHandler(ss *services.StoreService) *StoreHandler {
-	return &StoreHandler{StoreService: ss}
+type storeHandler struct {
+	storeService services.StoreService
 }
 
-// LazadaGenerateAccessToken handles fetching and storing Lazada access tokens
-func (sh *StoreHandler) LazadaLinkStore(ctx echo.Context) error {
+func NewStoreHandler(ss services.StoreService) StoreHandler {
+	return &storeHandler{storeService: ss}
+}
+
+// LazadaLinkStore handles fetching and storing Lazada access tokens
+func (sh *storeHandler) LazadaLinkStore(ctx echo.Context) error {
 	authCode := ctx.QueryParam("code")
 	if authCode == "" {
 		return ctx.JSON(http.StatusBadRequest, map[string]string{"message": "Authorization code is required"})
 	}
 
-	response, err := sh.StoreService.FetchStoreInfo(authCode)
+	response, err := sh.storeService.FetchStoreInfo(authCode)
 	if err != nil {
 		return ctx.JSON(http.StatusInternalServerError, map[string]string{"message": err.Error()})
 	}
