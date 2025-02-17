@@ -278,7 +278,7 @@ func (lc *IopClient) Execute(apiPath string, apiMethod string, bodyParams map[st
 	}
 
 	// Log the full response
-	log.Printf("Lazada API Response: %+v\n", resp)
+	// log.Printf("Lazada API Response: %+v\n", resp)
 
 	// 🔥 Special Handling for `/auth/token/create`
 	if apiPath == "/auth/token/create" {

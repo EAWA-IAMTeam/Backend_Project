@@ -13,7 +13,9 @@ type LinkStore struct {
 	ShortCode        string `json:"short_code"`
 }
 
-// Lazada struct
+/*
+	below struct is Lazada API response for 'auth/token/create' endpoint
+*/
 type ApiResponseAccessToken struct {
 	AccessToken      string     `json:"access_token"`
 	Country          string     `json:"country"`
@@ -34,6 +36,9 @@ type UserInfo struct {
 	ShortCode string `json:"short_code"`
 }
 
+/*
+	below struct is Lazada API response for 'seller/get' endpoint
+*/
 type ApiResponseStoreInfo struct {
 	Name                string `json:"name"`
 	Verified            bool   `json:"verified"`
@@ -44,4 +49,10 @@ type ApiResponseStoreInfo struct {
 	ShortCode           string `json:"short_code"`
 	CB                  bool   `json:"cb"`     // Cross Border seller
 	Status              string `json:"status"` // ACTIVE INACTIVE DELETED
+}
+
+type LazadaStoreResponse struct {
+	Code    string               `json:"code"`
+	Message string               `json:"message"`
+	Data    ApiResponseStoreInfo `json:"data"`
 }

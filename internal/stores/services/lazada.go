@@ -4,9 +4,8 @@ import (
 	"backend_project/internal/config"
 	"backend_project/internal/stores/models"
 	"backend_project/sdk"
+	"encoding/json"
 	"fmt"
-
-	"github.com/labstack/gommon/log"
 )
 
 // initLazadaClient initializes and returns a Lazada API client
@@ -35,7 +34,7 @@ func (ss *storeService) LazadaGenerateAccessToken(authCode string) (*models.Link
 		return nil, fmt.Errorf("API request error: %v", err)
 	}
 
-	log.Printf("Lazada API response: %+v\n", resp)
+	// log.Printf("Lazada API response: %+v\n", resp)
 
 	// Validate Lazada API response
 	if resp.Code != "0" {
@@ -64,9 +63,8 @@ func (ss *storeService) LazadaGenerateAccessToken(authCode string) (*models.Link
 	return linkStore, nil
 }
 
-// TODO: Modify the return into models.ApiResponseStoreInfo
-func (ss storeService) LazadaFetchStoreInfo(accessToken string) (interface{}, error) {
-
+// Call Lazada API to fetch store info using the access token
+func (ss *storeService) LazadaFetchStoreInfo(accessToken string) (*models.ApiResponseStoreInfo, error) {
 	lazadaClient, err := ss.initLazadaClient()
 	if err != nil {
 		return nil, err
@@ -74,10 +72,28 @@ func (ss storeService) LazadaFetchStoreInfo(accessToken string) (interface{}, er
 
 	lazadaClient.AddAPIParam("access_token", accessToken)
 
-	storeInfo, _, err := lazadaClient.Execute("/seller/get", "GET", nil)
+	// Execute the request
+	response, _, err := lazadaClient.Execute("/seller/get", "GET", nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("lazada API request failed: %w", err)
 	}
 
-	return storeInfo, nil
+	// Convert response body to bytes
+	responseBytes, err := json.Marshal(response)
+	if err != nil {
+		return nil, fmt.Errorf("failed to serialize response body: %w", err)
+	}
+
+	// Unmarshal into LazadaStoreResponse
+	var lazadaResp models.LazadaStoreResponse
+	if err := json.Unmarshal(responseBytes, &lazadaResp); err != nil {
+		return nil, fmt.Errorf("failed to parse Lazada response: %w", err)
+	}
+
+	// Check for API errors
+	if lazadaResp.Code != "0" {
+		return nil, fmt.Errorf("lazada API error: %s", lazadaResp.Message)
+	}
+
+	return &lazadaResp.Data, nil
 }
