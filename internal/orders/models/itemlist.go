@@ -21,5 +21,8 @@ type Item struct {
 	ShippingFeeDiscountSeller float64 `json:"shipping_fee_discount_seller"`
 	ShippingAmount            float64 `json:"shipping_amount"`
 	OrderID                   int64   `json:"order_id"`
+	ReturnStatus              string  `json:"return_status"`
+	ReturnReason              string  `json:"reason"`
+	ImageUrl                  string  `json:"product_main_image"`
 	// Add other fields as necessary based on the JSON structure
 }

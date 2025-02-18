@@ -4,7 +4,6 @@ import (
 	"backend_project/internal/orders/models"
 	"backend_project/internal/orders/repositories"
 	"fmt"
-	"log"
 )
 
 type OrdersService interface {
@@ -15,10 +14,11 @@ type OrdersService interface {
 type ordersService struct {
 	repo            repositories.OrdersRepository
 	itemListService ItemListService
+	returnService   ReturnService
 }
 
-func NewOrdersService(repo repositories.OrdersRepository, itemListService ItemListService) OrdersService {
-	return &ordersService{repo, itemListService}
+func NewOrdersService(repo repositories.OrdersRepository, itemListService ItemListService, returnService ReturnService) OrdersService {
+	return &ordersService{repo, itemListService, returnService}
 }
 
 func (s *ordersService) GetOrders(createdAfter string, offset int, limit int, status string) ([]models.Order, error) {
@@ -28,7 +28,6 @@ func (s *ordersService) GetOrders(createdAfter string, offset int, limit int, st
 	}
 
 	if ordersData == nil || len(ordersData.Orders) == 0 {
-		log.Println("No orders found in response")
 		return nil, nil
 	}
 
@@ -51,9 +50,14 @@ func (s *ordersService) GetOrders(createdAfter string, offset int, limit int, st
 				ordersData.Orders[i].Items = append(ordersData.Orders[i].Items, item)
 			}
 		}
+
+		// Fetch and merge return data
+		returnData, err := s.returnService.ProcessReturn(fmt.Sprintf("%d", order.OrderID), "1", "1") // Adjust page_size if needed
+		if err == nil {
+			ordersData.Orders[i].RefundStatus = returnData // Ensure this matches the type in the Order struct
+		}
 	}
 
-	log.Printf("Parsed orders count: %d\n", len(ordersData.Orders))
 	return ordersData.Orders, nil
 }
 

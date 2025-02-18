@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log"
+	"math"
 	"strconv"
 )
 
@@ -89,17 +90,49 @@ func (r *ordersRepository) SaveOrder(order *models.Order, companyID string) erro
 		return err
 	}
 
-	// Serialize the entire order to JSON
-	orderJSON, err := json.Marshal(order)
+	// Convert Order to SQLData before marshaling
+	sqlData := ConvertOrderToSQLData(*order)
+	sqlDataJSON, err := json.Marshal(sqlData)
 	if err != nil {
-		log.Printf("Error marshalling order: %v", err)
+		log.Printf("Error marshalling SQL data: %v", err)
 		return err
 	}
 
-	_, err = r.DB.Exec(query, order.OrderID, order.ItemsCount, order.Items[0].TrackingCode, order.Statuses[0], string(itemListJSON), string(orderJSON), companyID)
+	_, err = r.DB.Exec(query, order.OrderID, order.ItemsCount, order.Items[0].TrackingCode, order.Statuses[0], string(itemListJSON), string(sqlDataJSON), companyID)
 	if err != nil {
 		log.Printf("Error saving order: %v", err)
 		return err
 	}
 	return nil
+}
+
+func ConvertOrderToSQLData(order models.Order) models.SQLData {
+	// Ensure there is at least one element in the RefundStatus slice before accessing
+	var refundAmount float64
+	var refundReason string
+
+	if len(order.RefundStatus) > 0 {
+		refundAmount = math.Round(float64(order.RefundStatus[0].RefundAmount)/100*100) / 100 // Convert to 2 decimal places
+		refundReason = order.RefundStatus[0].ReasonText
+	}
+
+	return models.SQLData{
+		CustomerName:              order.CustomerFirstName + " " + order.CustomerLastName,
+		CustomerPhone:             order.AddressShipping.Phone,
+		CustomerAddress:           order.AddressShipping.Address1,
+		CourierService:            order.DeliveryInfo,
+		TransactionFee:            0, // Assumption
+		ShippingFee:               order.ShippingFee,
+		ProcessFee:                0, // Assumption
+		ServiceFee:                0, // Assumption
+		SellerDiscount:            order.VoucherSeller,
+		PlatformDiscount:          order.VoucherPlatform,
+		ShippingFeeDiscountSeller: order.ShippingFeeDiscountSeller,
+		TotalPrice:                order.Price,
+		Currency:                  "MYR",
+		RefundAmount:              int(refundAmount), // Updated refund amount with 2 decimal places
+		RefundReason:              refundReason,      // Updated refund reason
+		CreatedAt:                 order.CreatedAt,
+		SystemUpdateTime:          order.UpdatedAt,
+	}
 }

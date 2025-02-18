@@ -14,10 +14,11 @@ import (
 type OrdersHandler struct {
 	ordersService   services.OrdersService
 	itemListService services.ItemListService
+	returnHandler   *ReturnHandler
 }
 
-func NewOrdersHandler(ordersService services.OrdersService, itemListService services.ItemListService) *OrdersHandler {
-	return &OrdersHandler{ordersService, itemListService}
+func NewOrdersHandler(ordersService services.OrdersService, itemListService services.ItemListService, returnHandler *ReturnHandler) *OrdersHandler {
+	return &OrdersHandler{ordersService, itemListService, returnHandler}
 }
 
 func (h *OrdersHandler) GetOrders(c echo.Context) error {
@@ -37,7 +38,7 @@ func (h *OrdersHandler) GetOrders(c echo.Context) error {
 	var allOrders []models.Order
 	offset := 0
 	limit := 100      // API's maximum limit per call
-	totalLimit := 200 // Your internal limit for the operation
+	totalLimit := 100 // Your internal limit for the operation
 
 	for len(allOrders) < totalLimit {
 		orders, err := h.ordersService.GetOrders(createdAfter, offset, limit, status)
@@ -81,6 +82,16 @@ func (h *OrdersHandler) GetOrders(c echo.Context) error {
 				"message": fmt.Sprintf("Failed to save order with ID %d", order.OrderID),
 				"error":   err.Error(),
 			})
+		}
+	}
+
+	// Log each order ID with status "returned"
+	for _, order := range allOrders {
+		if order.Statuses[0] == "returned" {
+			err := h.returnHandler.HandleReturnRequest(int(order.OrderID))
+			if err != nil {
+				log.Printf("Error processing return for order ID %d: %s", order.OrderID, err.Error())
+			}
 		}
 	}
 

@@ -7,7 +7,6 @@ import (
 	"backend_project/internal/orders/repositories"
 	"backend_project/internal/orders/services"
 	"backend_project/sdk"
-	"fmt"
 	"log"
 
 	"github.com/labstack/echo/v4"
@@ -24,9 +23,8 @@ func main() {
 	// Test database connection
 	if err = db.Ping(); err != nil {
 		log.Fatalf("Failed to connect to the database: %v", err)
-	} else {
-		fmt.Println("Connected to the database successfully!")
 	}
+
 	// Load environment variables from .env file
 	env := config.LoadConfig()
 
@@ -42,16 +40,24 @@ func main() {
 	// Initialize Echo server
 	e := echo.New()
 
-	// Set up the repository, service, and handler
+	// Repositories
+	returnRepo := repositories.NewReturnRepository(iopClient, env.AppKey, env.AccessToken, db)
 	ordersRepo := repositories.NewOrdersRepository(iopClient, env.AppKey, env.AccessToken, db)
 	itemListRepo := repositories.NewItemListRepository(iopClient, env.AppKey, env.AccessToken, db)
 
+	// Services
 	itemListService := services.NewItemListService(itemListRepo)
-	ordersService := services.NewOrdersService(ordersRepo, itemListService)
+	returnService := services.NewReturnService(returnRepo)
+	ordersService := services.NewOrdersService(ordersRepo, itemListService, returnService)
 
-	ordersHandler := handlers.NewOrdersHandler(ordersService, itemListService)
+	// Initialize return handler
+	returnHandler := handlers.NewReturnHandler(returnService)
+
+	// Initialize orders handler with all required services
+	ordersHandler := handlers.NewOrdersHandler(ordersService, itemListService, returnHandler)
 
 	// Define API routes
+	e.GET("/orders/:company_id", ordersHandler.GetOrders)
 	e.GET("/orders/:company_id/:status", ordersHandler.GetOrders)
 
 	// Start the server on IP 192.168.0.240 and port 8080

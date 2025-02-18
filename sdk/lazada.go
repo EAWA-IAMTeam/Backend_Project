@@ -163,6 +163,7 @@ type Response struct {
 	Message   string          `json:"message"`
 	RequestID string          `json:"request_id"`
 	Data      json.RawMessage `json:"data"`
+	Result    json.RawMessage `json:"result"`
 }
 
 // ResponseError defines a error response
