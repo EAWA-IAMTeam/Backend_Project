@@ -121,3 +121,12 @@ func (h *OrdersHandler) GetOrders(c echo.Context) error {
 
 	return c.JSON(http.StatusOK, allOrders)
 }
+
+func (h *OrdersHandler) FetchOrdersByCompanyID(c echo.Context) error {
+	companyID := c.Param("company_id")
+	orders, err := h.ordersService.FetchOrdersByCompanyID(companyID)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+	return c.JSON(http.StatusOK, orders)
+}

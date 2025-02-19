@@ -9,11 +9,13 @@ import (
 	"log"
 	"math"
 	"strconv"
+	"strings"
 )
 
 type OrdersRepository interface {
 	FetchOrders(createdAfter string, offset int, limit int, status string) (*models.OrdersData, error)
 	SaveOrder(order *models.Order, companyID string) error
+	FetchOrdersByCompanyID(companyID string) ([]models.Order, error)
 }
 
 type ordersRepository struct {
@@ -66,7 +68,7 @@ func (r *ordersRepository) SaveOrder(order *models.Order, companyID string) erro
 		return errors.New("order has no items")
 	}
 
-	// Check if the order already exists for the given company
+	// Check if the order already exists
 	var exists bool
 	err := r.DB.QueryRow("SELECT EXISTS(SELECT 1 FROM \"Order\" WHERE id = $1 AND company_id = $2)", order.OrderID, companyID).Scan(&exists)
 	if err != nil {
@@ -74,23 +76,12 @@ func (r *ordersRepository) SaveOrder(order *models.Order, companyID string) erro
 		return err
 	}
 
-	if exists {
-		log.Printf("Order with ID %d already exists for company ID %s, skipping save", order.OrderID, companyID)
-		return nil
-	}
-
-	query := `
-		INSERT INTO "Order" (id, store_id, tracking_id, status, item_list, data, company_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
-	`
-
 	itemListJSON, err := json.Marshal(order.Items)
 	if err != nil {
 		log.Printf("Error marshalling items: %v", err)
 		return err
 	}
 
-	// Convert Order to SQLData before marshaling
 	sqlData := ConvertOrderToSQLData(*order)
 	sqlDataJSON, err := json.Marshal(sqlData)
 	if err != nil {
@@ -98,11 +89,21 @@ func (r *ordersRepository) SaveOrder(order *models.Order, companyID string) erro
 		return err
 	}
 
-	_, err = r.DB.Exec(query, order.OrderID, order.ItemsCount, order.Items[0].TrackingCode, order.Statuses[0], string(itemListJSON), string(sqlDataJSON), companyID)
+	if exists {
+		// Update existing order
+		query := `UPDATE "Order" SET store_id = $2, tracking_id = $3, status = $4, item_list = $5, data = $6 WHERE id = $1 AND company_id = $7`
+		_, err = r.DB.Exec(query, order.OrderID, order.ItemsCount, order.Items[0].TrackingCode, order.Statuses[0], string(itemListJSON), string(sqlDataJSON), companyID)
+	} else {
+		// Insert new order
+		query := `INSERT INTO "Order" (id, store_id, tracking_id, status, item_list, data, company_id) VALUES ($1, $2, $3, $4, $5, $6, $7)`
+		_, err = r.DB.Exec(query, order.OrderID, order.ItemsCount, order.Items[0].TrackingCode, order.Statuses[0], string(itemListJSON), string(sqlDataJSON), companyID)
+	}
+
 	if err != nil {
 		log.Printf("Error saving order: %v", err)
 		return err
 	}
+
 	return nil
 }
 
@@ -117,6 +118,7 @@ func ConvertOrderToSQLData(order models.Order) models.SQLData {
 	}
 
 	return models.SQLData{
+		OrderID:                   order.OrderID,
 		CustomerName:              order.CustomerFirstName + " " + order.CustomerLastName,
 		CustomerPhone:             order.AddressShipping.Phone,
 		CustomerAddress:           order.AddressShipping.Address1,
@@ -130,9 +132,93 @@ func ConvertOrderToSQLData(order models.Order) models.SQLData {
 		ShippingFeeDiscountSeller: order.ShippingFeeDiscountSeller,
 		TotalPrice:                order.Price,
 		Currency:                  "MYR",
+		Status:                    order.Statuses,
 		RefundAmount:              int(refundAmount), // Updated refund amount with 2 decimal places
 		RefundReason:              refundReason,      // Updated refund reason
 		CreatedAt:                 order.CreatedAt,
 		SystemUpdateTime:          order.UpdatedAt,
 	}
+}
+
+func (r *ordersRepository) FetchOrdersByCompanyID(companyID string) ([]models.Order, error) {
+	query := `
+		SELECT id, tracking_id, status, data, item_list
+		FROM "Order"
+		WHERE company_id = $1`
+
+	rows, err := r.DB.Query(query, companyID)
+	if err != nil {
+		log.Printf("Error querying orders: %v", err)
+		return nil, err
+	}
+	defer rows.Close()
+
+	var orders []models.Order
+	for rows.Next() {
+		// Initialize order with empty slices to prevent nil pointer dereference
+		order := models.Order{
+			Items:           make([]models.Item, 1), // Initialize with length 1 for first item
+			Statuses:        make([]string, 1),      // Initialize with length 1 for first status
+			AddressShipping: models.Address{},       // Initialize empty address struct
+		}
+
+		var dataJSON, itemListJSON string
+
+		err := rows.Scan(
+			&order.OrderID,
+			&order.Items[0].TrackingCode,
+			&order.Statuses[0],
+			&dataJSON,
+			&itemListJSON,
+		)
+		if err != nil {
+			log.Printf("Error scanning row: %v", err)
+			return nil, err
+		}
+
+		// Parse the SQLData from JSON
+		var sqlData models.SQLData
+		if err := json.Unmarshal([]byte(dataJSON), &sqlData); err != nil {
+			log.Printf("Error unmarshaling SQL data: %v", err)
+			return nil, err
+		}
+
+		// Parse the ItemList from JSON
+		if err := json.Unmarshal([]byte(itemListJSON), &order.Items); err != nil {
+			log.Printf("Error unmarshaling item list: %v", err)
+			return nil, err
+		}
+
+		// Split customer name into first and last name
+		names := strings.Split(sqlData.CustomerName, " ")
+		if len(names) > 0 {
+			order.CustomerFirstName = names[0]
+			if len(names) > 1 {
+				order.CustomerLastName = strings.Join(names[1:], " ")
+			}
+		}
+
+		// Populate the order struct with data from SQLData
+		order.AddressShipping.Phone = sqlData.CustomerPhone
+		order.AddressShipping.FirstName = sqlData.CustomerName
+		order.AddressShipping.Address1 = sqlData.CustomerAddress
+		order.DeliveryInfo = sqlData.CourierService
+		order.ShippingFee = sqlData.ShippingFee
+		order.VoucherSeller = sqlData.SellerDiscount
+		order.VoucherPlatform = sqlData.PlatformDiscount
+		order.ShippingFeeDiscountSeller = sqlData.ShippingFeeDiscountSeller
+		order.Price = sqlData.TotalPrice
+		order.CreatedAt = sqlData.CreatedAt
+		order.UpdatedAt = sqlData.SystemUpdateTime
+		order.Statuses = sqlData.Status // Update with full status array from SQLData
+
+		orders = append(orders, order)
+	}
+
+	if err = rows.Err(); err != nil {
+		log.Printf("Error iterating rows: %v", err)
+		return nil, err
+	}
+
+	return orders, nil
 }

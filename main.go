@@ -59,6 +59,7 @@ func main() {
 	// Define API routes
 	e.GET("/orders/:company_id", ordersHandler.GetOrders)
 	e.GET("/orders/:company_id/:status", ordersHandler.GetOrders)
+	e.GET("/orders/:company_id/E", ordersHandler.FetchOrdersByCompanyID)
 
 	// Start the server on IP 192.168.0.240 and port 8080
 	serverAddr := "192.168.0.240:8080"

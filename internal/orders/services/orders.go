@@ -9,6 +9,7 @@ import (
 type OrdersService interface {
 	GetOrders(createdAfter string, offset int, limit int, status string) ([]models.Order, error)
 	SaveOrder(order *models.Order, companyID string) error
+	FetchOrdersByCompanyID(companyID string) ([]models.Order, error)
 }
 
 type ordersService struct {
@@ -63,4 +64,8 @@ func (s *ordersService) GetOrders(createdAfter string, offset int, limit int, st
 
 func (s *ordersService) SaveOrder(order *models.Order, companyID string) error {
 	return s.repo.SaveOrder(order, companyID)
+}
+
+func (s *ordersService) FetchOrdersByCompanyID(companyID string) ([]models.Order, error) {
+	return s.repo.FetchOrdersByCompanyID(companyID)
 }

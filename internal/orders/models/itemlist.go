@@ -1,13 +1,10 @@
 package models
 
 type OrderItem struct {
-	OrderNumber int64  `json:"order_number"`
-	OrderID     int64  `json:"order_id"`
-	OrderItems  []Item `json:"order_items"`
+	OrderItems []Item `json:"order_items"`
 }
 
 type Item struct {
-	OrderItemID               int64   `json:"order_item_id"`
 	Name                      string  `json:"name"`
 	Status                    string  `json:"status"`
 	PaidPrice                 float64 `json:"paid_price"`

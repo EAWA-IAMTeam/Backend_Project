@@ -5,13 +5,12 @@ type OrdersData struct {
 }
 
 type Order struct {
-	OrderNumber                 int64          `json:"order_number"`
+	OrderID                     int64          `json:"order_id"`
 	CreatedAt                   string         `json:"created_at"`
 	UpdatedAt                   string         `json:"updated_at"`
 	Price                       string         `json:"price"`
 	PaymentMethod               string         `json:"payment_method"`
 	Statuses                    []string       `json:"statuses"`
-	OrderID                     int64          `json:"order_id"`
 	VoucherPlatform             float64        `json:"voucher_platform"`
 	Voucher                     float64        `json:"voucher"`
 	WarehouseCode               string         `json:"warehouse_code"`
@@ -49,19 +48,21 @@ type Address struct {
 }
 
 type SQLData struct {
-	CustomerName              string  `json:"first_name"`
-	CustomerPhone             string  `json:"phone"`
-	CustomerAddress           string  `json:"address1"`
-	CourierService            string  `json:"CourierService"`
-	TransactionFee            float64 `json:"transaction_fee"`
-	ShippingFee               float64 `json:"shipping_fee"`
-	ProcessFee                float64 `json:"process_fee"`
-	ServiceFee                float64 `json:"service_fee"`
-	SellerDiscount            float64 `json:"seller_discount"`
-	PlatformDiscount          float64 `json:"platform_discount"`
-	ShippingFeeDiscountSeller float64 `json:"shipping_fee_discount_seller"`
-	TotalPrice                string  `json:"price"`
-	Currency                  string  `json:"currency"`
+	OrderID                   int64    `json:"order_id"`
+	CustomerName              string   `json:"CustomerName"`
+	CustomerPhone             string   `json:"CustomerPhone"`
+	CustomerAddress           string   `json:"CustomerAddress"`
+	CourierService            string   `json:"CourierService"`
+	TransactionFee            float64  `json:"TransactionFee"`
+	ShippingFee               float64  `json:"ShippingFee"`
+	ProcessFee                float64  `json:"ProcessFee"`
+	ServiceFee                float64  `json:"service_fee"`
+	SellerDiscount            float64  `json:"seller_discount"`
+	PlatformDiscount          float64  `json:"platform_discount"`
+	ShippingFeeDiscountSeller float64  `json:"shipping_fee_discount_seller"`
+	TotalPrice                string   `json:"TotalAmount"`
+	Currency                  string   `json:"currency"`
+	Status                    []string `json:"statuses"`
 	//Platform string `json:"platform"` (set via prefix)
 	//Store string `json:"store"` (set via prefix)
 	//PlatformReleasedAmount float64 `json:"platform_released_amount"` //payment
