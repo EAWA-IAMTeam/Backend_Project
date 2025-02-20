@@ -2,51 +2,56 @@ package handlers
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
+	"strconv"
 	"time"
 
-	"backend_project/internal/middleware/models"
-
 	"github.com/labstack/echo/v4"
+	"github.com/nats-io/nats.go"
 )
 
-//Handle Post Requests (Publish Event)
+// Handle Post Requests (Publish Event)
+type RequestHandler struct {
+	nc *nats.Conn
+	js nats.JetStreamContext
+}
 
-func HandlePostRequest(c echo.Context) error {
-	req := new(models.RequestPayload)
-	if err := c.Bind(req); err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid JSON"})
+func NewRequestHandler(nc *nats.Conn, js nats.JetStreamContext) *RequestHandler {
+	return &RequestHandler{
+		nc: nc,
+		js: js,
 	}
-
-	//Convert data to JSON
-	data, _ := json.Marshal(req.Data)
-
-	//Publish to JetStream
-	_, err := js.Publish(req.Topic, data)
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to publish message"})
-	}
-
-	return c.JSON(http.StatusOK, map[string]string{"message": "Message published successfully"})
 }
 
 // Handle Get Requests (Consume Event)
-func HandleGetRequest(c echo.Context) error {
-	topic := c.Param("topic")           //Extract topic from query
-	orderID := c.QueryParam("order_id") // Extract order ID
-
-	if topic == "" || orderID == "" {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Missing required parameters"})
-	}
-
-	requestData := map[string]string{"order_id": orderID}
-	data, _ := json.Marshal(requestData)
-
-	//Request data from NATS (Order Status)
-	msg, err := nc.Request(topic, data, 2*time.Second)
+func (h *RequestHandler) HandleGetRequest(c echo.Context) error {
+	companyIDstr := c.QueryParam("company_id")
+	companyID, err := strconv.Atoi(companyIDstr)
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Timeout waiting for response"})
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid order_id"})
 	}
 
-	return c.JSON(http.StatusOK, json.RawMessage(msg.Data))
+	// Prepare request data
+	request := map[string]int{"company_id": companyID}
+	data, _ := json.Marshal(request)
+
+	// Request data from Orders service
+	msg, err := h.nc.Request("order.company.get", data, 5*time.Second)
+	if err != nil {
+		log.Printf("Error requesting orders: %v", err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "Failed to fetch orders",
+		})
+	}
+
+	// Parse and return response
+	var response json.RawMessage
+	if err := json.Unmarshal(msg.Data, &response); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "Invalid response format",
+		})
+	}
+
+	return c.JSON(http.StatusOK, response)
 }
