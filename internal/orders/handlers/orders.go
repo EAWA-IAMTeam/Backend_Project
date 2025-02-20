@@ -7,6 +7,8 @@ import (
 	"net/http"
 
 	"log"
+	"sync"
+	"time"
 
 	"github.com/labstack/echo/v4"
 )
@@ -28,115 +30,195 @@ func (h *OrdersHandler) GetOrders(c echo.Context) error {
 	}
 
 	status := c.Param("status")
-	// No need to check if status is empty, as it's optional
 
+	// Parse createdAfter or set default
 	createdAfter := c.QueryParam("created_after")
 	if createdAfter == "" {
-		createdAfter = "2024-02-01T22:44:30+08:00"
+		// Default to current time minus 3 months
+		startTime := time.Now().AddDate(0, -3, 0)
+		createdAfter = startTime.Format("2006-01-02T15:04:05-07:00")
 	}
-	createdBefore := c.QueryParam("created_before")
 
-	sort_direction := c.QueryParam("sort_direction")
-	if sort_direction == "" {
-		sort_direction = "DESC" // Default to descending order
-	} else if sort_direction != "ASC" && sort_direction != "DESC" {
+	// Parse start time
+	startTime, err := time.Parse(time.RFC3339, createdAfter)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"message": "Invalid created_after date format",
+			"error":   err.Error(),
+		})
+	}
+
+	// Set createdBefore to 3 months after createdAfter
+	endTime := startTime.AddDate(0, 3, 0)
+	createdBefore := endTime.Format("2006-01-02T15:04:05-07:00")
+
+	// Override with query param if provided
+	if queryBefore := c.QueryParam("created_before"); queryBefore != "" {
+		parsedQueryBefore, err := time.Parse(time.RFC3339, queryBefore)
+		if err != nil {
+			return c.JSON(http.StatusBadRequest, map[string]string{
+				"message": "Invalid created_before date format",
+				"error":   err.Error(),
+			})
+		}
+		// Use provided date if it's within 3 months
+		if parsedQueryBefore.Before(endTime) {
+			createdBefore = queryBefore
+		}
+	}
+
+	log.Printf("Processing orders from %s to %s", createdAfter, createdBefore)
+
+	sortDirection := c.QueryParam("sort_direction")
+	if sortDirection == "" {
+		sortDirection = "DESC"
+	} else if sortDirection != "ASC" && sortDirection != "DESC" {
 		return c.JSON(http.StatusBadRequest, map[string]string{
 			"message": "sort_direction must be either ASC or DESC",
 		})
 	}
 
-	var allOrders []models.Order
-	offset := 0
-	limit := 100       // API's maximum limit per call
-	totalLimit := 100  // Your internal limit for the operation
-	var totalCount int // Add at the top with other vars
-
-	for len(allOrders) < totalLimit {
-		orders, count, err := h.ordersService.GetOrders(createdAfter, createdBefore, offset, limit, status, sort_direction)
-		if err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{
-				"message": "Failed to retrieve orders",
-				"error":   err.Error(),
-			})
-		}
-
-		totalCount = count // Store the count from the first response
-
-		if len(orders) == 0 {
-			break // No more orders to fetch
-		}
-
-		allOrders = append(allOrders, orders...)
-		offset += limit // Move to the next set of orders
-
-		if len(allOrders) >= totalLimit {
-			allOrders = allOrders[:totalLimit] // Ensure not to exceed 500 orders
-			break
-		}
+	// Processing state
+	type ProcessingState struct {
+		LastProcessedTime string
+		TotalProcessed    int
+		IsCompleted       bool
+		Offset            int
+		CountTotal        int
+		Orders            []models.Order
 	}
 
-	if len(allOrders) == 0 {
-		return c.JSON(http.StatusOK, map[string]interface{}{
-			"orders":     []models.Order{},
-			"counttotal": 0,
-			"count":      0,
-		})
+	state := ProcessingState{
+		LastProcessedTime: createdAfter,
+		TotalProcessed:    0,
+		IsCompleted:       false,
+		Offset:            0,
+		CountTotal:        0,
+		Orders:            make([]models.Order, 0),
 	}
 
-	// Save each order from the retrieved list, adding a placeholder for those with no items
-	for _, order := range allOrders {
-		if len(order.Items) == 0 {
-			placeholderItem := models.Item{
-				Name: "No Item",
-				// Add other necessary fields with default values
+	for !state.IsCompleted {
+		var batchOrders []models.Order
+		limit := 100
+		maxOrdersPerBatch := 4900 // Batch processing limit
+
+		// Error handling and concurrency control
+		errorChan := make(chan error, maxOrdersPerBatch)
+		sem := make(chan struct{}, 50)
+		var wg sync.WaitGroup
+
+		log.Printf("Starting batch processing from timestamp: %s with offset %d", state.LastProcessedTime, state.Offset)
+
+		// Fetch orders in a single batch up to maxOrdersPerBatch
+		batchCount := 0
+		for batchCount < maxOrdersPerBatch {
+			orders, count, err := h.ordersService.GetOrders(
+				state.LastProcessedTime,
+				createdBefore,
+				state.Offset,
+				limit,
+				status,
+				sortDirection,
+			)
+			if err != nil {
+				return c.JSON(http.StatusInternalServerError, map[string]string{
+					"message": "Failed to retrieve orders",
+					"error":   err.Error(),
+				})
 			}
-			order.Items = append(order.Items, placeholderItem)
+
+			// Set total count from API response if it's the first batch
+			if state.CountTotal == 0 {
+				state.CountTotal = count
+				log.Printf("Total available orders: %d", state.CountTotal)
+			}
+
+			log.Printf("Retrieved %d orders out of %d total", len(orders), count)
+
+			if len(orders) == 0 || state.TotalProcessed >= state.CountTotal {
+				state.IsCompleted = true
+				break
+			}
+
+			// Save orders concurrently
+			for _, order := range orders {
+				wg.Add(1)
+				sem <- struct{}{}
+				go func(order models.Order) {
+					defer wg.Done()
+					defer func() { <-sem }() // Release semaphore
+
+					if len(order.Items) == 0 {
+						placeholderItem := models.Item{
+							Name: "No Item",
+						}
+						order.Items = append(order.Items, placeholderItem)
+					}
+
+					err := h.ordersService.SaveOrder(&order, companyID)
+					if err != nil {
+						errorChan <- fmt.Errorf("failed to save order %d: %v", order.OrderID, err)
+					}
+				}(order)
+			}
+
+			batchOrders = append(batchOrders, orders...)
+			state.Orders = append(state.Orders, orders...)
+			state.Offset += limit
+			state.TotalProcessed += len(orders)
+			batchCount += len(orders)
+
+			// Stop processing if we reached the total count
+			if state.TotalProcessed >= state.CountTotal {
+				state.IsCompleted = true
+				break
+			}
+
+			// Stop if max batch size is reached
+			if batchCount >= maxOrdersPerBatch {
+				break
+			}
 		}
 
-		err := h.ordersService.SaveOrder(&order, companyID)
-		if err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{
-				"message": fmt.Sprintf("Failed to save order with ID %d", order.OrderID),
-				"error":   err.Error(),
-			})
+		// Wait for all saves in this batch to complete
+		wg.Wait()
+		close(errorChan)
+
+		// Handle errors
+		var errors []string
+		for err := range errorChan {
+			errors = append(errors, err.Error())
+		}
+		if len(errors) > 0 {
+			log.Printf("Errors during order saving: %v", errors)
+		}
+
+		// Update state
+		if len(batchOrders) > 0 {
+			// Get the last order's timestamp and format to ISO8601
+			lastOrder := batchOrders[len(batchOrders)-1]
+			state.LastProcessedTime = lastOrder.CreatedAt
+
+			// Optional: Add a small delay between batches
+			time.Sleep(1 * time.Second)
+		} else {
+			state.IsCompleted = true
+		}
+
+		// Final check to ensure we don't exceed countTotal
+		if state.TotalProcessed >= state.CountTotal {
+			log.Printf("Reached total order count (%d), stopping process.", state.CountTotal)
+			state.IsCompleted = true
 		}
 	}
-	// Extract order IDs
-	var orderIDs []string
-	for _, order := range allOrders {
-		orderIDs = append(orderIDs, fmt.Sprintf("%d", order.OrderID))
-	}
 
-	// Fetch item lists in batches of 50 order IDs
-	for i := 0; i < len(orderIDs); i += 50 {
-		end := i + 50
-		if end > len(orderIDs) {
-			end = len(orderIDs)
-		}
-		batch := orderIDs[i:end]
+	log.Printf("All orders processing completed. Total processed: %d", state.TotalProcessed)
 
-		log.Printf("Processing batch of order IDs: %v", batch) // Debugging statement
-		_, err := h.itemListService.GetItemList(batch)
-		if err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{
-				"message": "Failed to retrieve item lists",
-				"error":   err.Error(),
-			})
-		}
-	}
-
-	// Create response structure
-	response := struct {
-		CountTotal int            `json:"counttotal"`
-		Count      int            `json:"count"`
-		Orders     []models.Order `json:"orders"`
-	}{
-		CountTotal: totalCount,
-		Count:      len(allOrders),
-		Orders:     allOrders,
-	}
-
-	return c.JSON(http.StatusOK, response)
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"orders":          state.Orders,
+		"total_processed": state.TotalProcessed,
+		"count_total":     state.CountTotal,
+	})
 }
 
 func (h *OrdersHandler) FetchOrdersByCompanyID(c echo.Context) error {
