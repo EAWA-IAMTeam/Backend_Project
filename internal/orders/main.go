@@ -23,14 +23,14 @@ func main() {
 		log.Fatalf("Failed to connect to NATS: %v", err)
 	}
 
-	// js, err := nc.JetStream()
-	// if err != nil {
-	// 	log.Fatalf("Failed to initialize JetStream: %v", err)
-	// }
+	js, err := nc.JetStream()
+	if err != nil {
+		log.Fatalf("Failed to initialize JetStream: %v", err)
+	}
 
 	// Initialize dependencies
 	repo := repositories.NewOrderRepository(db)
-	handler := handlers.NewOrderHandler(repo, nc)
+	handler := handlers.NewOrderHandler(repo, js)
 
 	// Setup NATS subscriptions
 	if err := handler.SetupSubscriptions(); err != nil {

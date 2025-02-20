@@ -6,15 +6,16 @@ import (
 
 // Order struct
 type Order struct {
-	OrderID      string    `json:"order_id"`
-	StoreID      string    `json:"store_id"`
-	CompanyID    int64     `json:"company_id"`
-	ShipmentDate time.Time `json:"shipment_date"`
-	OrderDate    time.Time `json:"order_date"`
-	TrackingID   string    `json:"tracking_id"`
-	OrderStatus  string    `json:"order_status"`
-	Data         Data      `json:"data"`
-	OrderItems   []Item    `json:"item_list"`
+	OrderID         int64     `json:"order_id"`
+	PlatformOrderID string    `json:"platform_order_id"`
+	StoreID         string    `json:"store_id"`
+	CompanyID       int64     `json:"company_id"`
+	ShipmentDate    time.Time `json:"shipment_date"`
+	OrderDate       time.Time `json:"order_date"`
+	TrackingID      string    `json:"tracking_id"`
+	OrderStatus     string    `json:"order_status"`
+	Data            Data      `json:"data"`
+	OrderItems      []Item    `json:"item_list"`
 }
 
 type Data struct {

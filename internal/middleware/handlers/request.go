@@ -18,40 +18,116 @@ type RequestHandler struct {
 }
 
 func NewRequestHandler(nc *nats.Conn, js nats.JetStreamContext) *RequestHandler {
-	return &RequestHandler{
-		nc: nc,
-		js: js,
+	// Ensure the ORDERS stream exists
+	_, err := js.AddStream(&nats.StreamConfig{
+		Name:     "order",
+		Subjects: []string{"order.request", "order.response.*"},
+		Storage:  nats.FileStorage, // Persistent storage
+	})
+	if err != nil && err != nats.ErrStreamNameAlreadyInUse {
+		log.Fatalf("Failed to create JetStream stream: %v", err)
 	}
+
+	// Create a durable consumer for responses
+	_, err = js.AddConsumer("order", &nats.ConsumerConfig{
+		Durable:       "order-replies",
+		FilterSubject: "order.response.*", // Listen to all responses
+		AckPolicy:     nats.AckExplicitPolicy,
+	})
+	if err != nil && err != nats.ErrConsumerNameAlreadyInUse {
+		log.Fatalf("Failed to create consumer: %v", err)
+	}
+
+	log.Println("JetStream order stream initialized")
+	return &RequestHandler{nc: nc, js: js}
 }
 
 // Handle Get Requests (Consume Event)
 func (h *RequestHandler) HandleGetRequest(c echo.Context) error {
-	companyIDstr := c.QueryParam("company_id")
-	companyID, err := strconv.Atoi(companyIDstr)
-	if err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid order_id"})
+	companyID, _ := strconv.Atoi(c.Param("company_id"))
+	topic := c.Param("topic")
+
+	page, _ := strconv.Atoi(c.QueryParam("page"))
+	limit, _ := strconv.Atoi(c.QueryParam("limit"))
+
+	//Set defaults if not provided
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 {
+		limit = 20 //default page size
 	}
 
-	// Prepare request data
-	request := map[string]int{"company_id": companyID}
+	// Generate a unique request ID
+	requestID := "req-" + strconv.FormatInt(time.Now().UnixNano(), 10)
+
+	// Create request payload
+	request := map[string]interface{}{
+		"company_id": companyID,
+		"request_id": requestID,
+		"pagination": map[string]int{
+			"page":  page,
+			"limit": limit,
+		},
+	}
 	data, _ := json.Marshal(request)
 
-	// Request data from Orders service
-	msg, err := h.nc.Request("order.company.get", data, 5*time.Second)
+	//Subscribe to Jetstream to fetch messages
+	_, err := h.js.Publish(topic+".request", data)
 	if err != nil {
-		log.Printf("Error requesting orders: %v", err)
-		return c.JSON(http.StatusInternalServerError, map[string]string{
-			"error": "Failed to fetch orders",
-		})
+		log.Printf("Failed to publish request: %v", err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to publish request"})
 	}
 
-	// Parse and return response
-	var response json.RawMessage
-	if err := json.Unmarshal(msg.Data, &response); err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]string{
-			"error": "Invalid response format",
-		})
+	//Subscribe to shared response consumer (order.response.*)
+	sub, err := h.js.PullSubscribe(topic+".response.*", topic+"-replies")
+	if err != nil {
+		log.Printf("Failed to subscribe for response: %v", err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to subscribe for response"})
 	}
+	// Fetch response (wait up to 15 seconds)
+	timeout := time.After(15 * time.Second)
+	for {
+		select {
+		case <-timeout:
+			return c.JSON(http.StatusGatewayTimeout, map[string]string{"error": "Timeout waiting for response"})
+		default:
+			msgs, err := sub.Fetch(1)
+			if err != nil || len(msgs) == 0 {
+				continue
+			}
 
-	return c.JSON(http.StatusOK, response)
+			// Parse and return response
+			var response json.RawMessage
+			if err := json.Unmarshal(msgs[0].Data, &response); err != nil {
+				log.Printf("Error : %v", err)
+				return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Invalid response format"})
+			}
+
+			// Acknowledge message processing
+			msgs[0].Ack()
+
+			return c.JSON(http.StatusOK, response)
+		}
+	}
 }
+
+// 	//Fetch response (wait up to 5 seconds)
+// 	msgs, err := sub.Fetch(1)
+// 	if err != nil || len(msgs) == 0 {
+// 		return c.JSON(http.StatusGatewayTimeout, map[string]string{"error": "Timeout waiting for response"})
+// 	}
+
+// 	// Parse and return response
+// 	var response json.RawMessage
+// 	if err := json.Unmarshal(msgs[0].Data, &response); err != nil {
+// 		return c.JSON(http.StatusInternalServerError, map[string]string{
+// 			"error": "Invalid response format",
+// 		})
+// 	}
+
+// 	// Acknowledge message processing
+// 	msgs[0].Ack()
+
+// 	return c.JSON(http.StatusOK, response)
+// }

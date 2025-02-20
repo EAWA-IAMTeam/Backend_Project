@@ -17,7 +17,7 @@ func NewOrderRepository(db *sql.DB) *OrderRepository {
 // GetOrdersByCompany fetches orders by company ID
 func (or *OrderRepository) GetOrdersByCompany(companyID int8) ([]*models.Order, error) {
 	query := `
-        SELECT id, store_id, company_id, shipment_date, order_date, tracking_id, status,
+        SELECT id, platform_order_id, store_id, company_id, shipment_date, order_date, tracking_id, status,
                data::json as data,
                item_list::json as item_list
         FROM "Order" 
@@ -37,6 +37,7 @@ func (or *OrderRepository) GetOrdersByCompany(companyID int8) ([]*models.Order, 
 		var order models.Order
 		err := rows.Scan(
 			&order.OrderID,
+			&order.PlatformOrderID,
 			&order.StoreID,
 			&order.CompanyID,
 			&order.ShipmentDate,
