@@ -15,17 +15,29 @@ func NewOrderRepository(db *sql.DB) *OrderRepository {
 }
 
 // GetOrdersByCompany fetches orders by company ID
-func (or *OrderRepository) GetOrdersByCompany(companyID int8) ([]*models.Order, error) {
-	query := `
-        SELECT id, platform_order_id, store_id, company_id, shipment_date, order_date, tracking_id, status,
-               data::json as data,
-               item_list::json as item_list
-        FROM "Order" 
-        WHERE company_id = $1`
+func (or *OrderRepository) GetOrdersByCompany(companyID int8, page, limit int) ([]*models.Order, int, error) {
+	//Calculate offset
+	offset := (page - 1) * limit
 
-	rows, err := or.DB.Query(query, companyID)
+	// Get paginated data
+	query := `
+	SELECT id, platform_order_id, store_id, company_id, shipment_date, order_date, 
+			tracking_id, status, data::json as data, item_list::json as item_list
+	FROM "Order" 
+	WHERE company_id = $1
+	ORDER BY order_date DESC
+	LIMIT $2 OFFSET $3`
+
+	// query := `
+	//     SELECT id, platform_order_id, store_id, company_id, shipment_date, order_date, tracking_id, status,
+	//            data::json as data,
+	//            item_list::json as item_list
+	//     FROM "Order"
+	//     WHERE company_id = $1`
+
+	rows, err := or.DB.Query(query, companyID, limit, offset)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer rows.Close()
 
@@ -48,21 +60,21 @@ func (or *OrderRepository) GetOrdersByCompany(companyID int8) ([]*models.Order, 
 			&OrderItems,
 		)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 
 		err = json.Unmarshal(dataJson, &order.Data)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 
 		err = json.Unmarshal(OrderItems, &order.OrderItems)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 
 		orders = append(orders, &order)
 	}
 
-	return orders, nil
+	return orders, 0, nil
 }

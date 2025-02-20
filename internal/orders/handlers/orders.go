@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"backend_project/internal/orders/models"
 	"backend_project/internal/orders/repositories"
 	"encoding/json"
 	"log"
@@ -32,10 +33,7 @@ func (h *OrderHandler) SetupSubscriptions() error {
 
 func (oh *OrderHandler) handleGetOrdersByCompany(msg *nats.Msg) {
 	//Extract comapny ID from subject
-	var request struct {
-		CompanyID int8   `json:"company_id"`
-		RequestID string `json:"request_id"`
-	}
+	var request models.PaginatedRequest
 
 	if err := json.Unmarshal(msg.Data, &request); err != nil {
 		log.Println("Failed to unmarshal request:", err)
@@ -44,7 +42,11 @@ func (oh *OrderHandler) handleGetOrdersByCompany(msg *nats.Msg) {
 	}
 
 	// Get orders from repository
-	orders, err := oh.repo.GetOrdersByCompany(request.CompanyID)
+	orders, _, err := oh.repo.GetOrdersByCompany(
+		request.CompanyID,
+		request.Pagination.Page,
+		request.Pagination.Limit,
+	)
 	if err != nil {
 		log.Printf("Error fetching orders: %v", err)
 		oh.respondWithError("Failed to fetch orders", request.RequestID)
