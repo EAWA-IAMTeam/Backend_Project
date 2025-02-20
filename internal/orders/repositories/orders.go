@@ -28,20 +28,21 @@ func NewOrdersRepository(client *sdk.IopClient, appKey, accessToken string, db *
 	return &ordersRepository{client, appKey, accessToken, db}
 }
 
+// FUNCTION PART--------------------------------------------------------------
+
+// FetchPayout through External API Lazada
 func (r *ordersRepository) FetchOrders(createdAfter string, createdBefore string, offset int, limit int, status string, sort_direction string) (*models.OrdersData, error) {
 	queryParams := map[string]string{
 		"appKey":      r.appKey,
 		"accessToken": r.accessToken,
 	}
 
-	// Only add date parameters if they are provided
 	if createdAfter != "" {
 		r.client.AddAPIParam("created_after", createdAfter)
 	}
 	if createdBefore != "" {
 		r.client.AddAPIParam("created_before", createdBefore)
 	}
-
 	r.client.AddAPIParam("offset", strconv.Itoa(offset))
 	r.client.AddAPIParam("limit", strconv.Itoa(limit))
 	if status != "" {
@@ -104,7 +105,7 @@ func (r *ordersRepository) SaveOrder(order *models.Order, companyID string) erro
 	if exists {
 		// Update existing order
 		query := `UPDATE "Order" SET store_id = $2, tracking_id = $3, status = $4, item_list = $5, data = $6, order_date = $7 WHERE platform_order_id = $1 AND company_id = $8`
-		_, err = r.DB.Exec(query, order.OrderID, order.ItemsCount, order.Items[0].TrackingCode, order.Statuses[0], string(itemListJSON), string(sqlDataJSON), order.CreatedAt, companyID)
+        _, err = r.DB.Exec(query, order.OrderID, order.ItemsCount, order.Items[0].TrackingCode, order.Statuses[0], string(itemListJSON), string(sqlDataJSON), order.CreatedAt, companyID)
 	} else {
 		// Insert new order
 		query := `INSERT INTO "Order" (platform_order_id, store_id, tracking_id, status, item_list, data, company_id, order_date) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
@@ -120,6 +121,7 @@ func (r *ordersRepository) SaveOrder(order *models.Order, companyID string) erro
 }
 
 func ConvertOrderToSQLData(order models.Order) models.SQLData {
+	// Ensure there is at least one element in the RefundStatus slice before accessing
 	var refundAmount float64
 	var refundReason string
 
@@ -144,6 +146,7 @@ func ConvertOrderToSQLData(order models.Order) models.SQLData {
 		ShippingFeeDiscountSeller: order.ShippingFeeDiscountSeller,
 		TotalPrice:                order.Price,
 		Currency:                  "MYR",
+		TotalReleasedAmount:       order.TotalReleasedAmount,
 		Status:                    order.Statuses,
 		RefundAmount:              int(refundAmount),
 		RefundReason:              refundReason,
@@ -159,6 +162,7 @@ func (r *ordersRepository) FetchOrdersByCompanyID(companyID string) ([]models.Or
 		WHERE company_id = $1`
 
 	rows, err := r.DB.Query(query, companyID)
+	log.Print(rows)
 	if err != nil {
 		log.Printf("Error querying orders: %v", err)
 		return nil, err
@@ -222,7 +226,8 @@ func (r *ordersRepository) FetchOrdersByCompanyID(companyID string) ([]models.Or
 		order.Price = sqlData.TotalPrice
 		order.CreatedAt = sqlData.CreatedAt
 		order.UpdatedAt = sqlData.SystemUpdateTime
-		order.Statuses = sqlData.Status // Update with full status array from SQLData
+		order.Statuses = sqlData.Status
+		order.TotalReleasedAmount = sqlData.TotalReleasedAmount // Update with full status array from SQLData
 
 		if sqlData.RefundAmount > 0 {
 			order.RefundStatus = []models.ReturnRefund{{

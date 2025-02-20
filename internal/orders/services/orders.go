@@ -16,10 +16,11 @@ type ordersService struct {
 	repo            repositories.OrdersRepository
 	itemListService ItemListService
 	returnService   ReturnService
+	paymentService  PaymentService
 }
 
-func NewOrdersService(repo repositories.OrdersRepository, itemListService ItemListService, returnService ReturnService) OrdersService {
-	return &ordersService{repo, itemListService, returnService}
+func NewOrdersService(repo repositories.OrdersRepository, itemListService ItemListService, returnService ReturnService, paymentService PaymentService) OrdersService {
+	return &ordersService{repo, itemListService, returnService, paymentService}
 }
 
 func (s *ordersService) GetOrders(createdAfter string, createdBefore string, offset int, limit int, status string, sort_direction string) ([]models.Order, int, error) {

@@ -9,6 +9,9 @@ import (
 	"log"
 	"sync"
 	"time"
+	"strconv"
+	"strings"
+	"math"
 
 	"github.com/labstack/echo/v4"
 )
@@ -17,10 +20,11 @@ type OrdersHandler struct {
 	ordersService   services.OrdersService
 	itemListService services.ItemListService
 	returnHandler   *ReturnHandler
+	paymentService services.PaymentService
 }
 
-func NewOrdersHandler(ordersService services.OrdersService, itemListService services.ItemListService, returnHandler *ReturnHandler) *OrdersHandler {
-	return &OrdersHandler{ordersService, itemListService, returnHandler}
+func NewOrdersHandler(ordersService services.OrdersService, itemListService services.ItemListService, returnHandler *ReturnHandler, paymentService services.PaymentService) *OrdersHandler {
+	return &OrdersHandler{ordersService, itemListService, returnHandler, paymentService}
 }
 
 func (h *OrdersHandler) GetOrders(c echo.Context) error {
@@ -227,5 +231,88 @@ func (h *OrdersHandler) FetchOrdersByCompanyID(c echo.Context) error {
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
+	return c.JSON(http.StatusOK, orders)
+}
+
+func (h *OrdersHandler) GetTransactionsByOrder(c echo.Context) error {
+	// Define date range for transaction search
+	endTime := "2025-02-20T22:44:30+08:00"
+	startTime := "2024-12-01T22:44:30+08:00"
+	offset := 0
+	limit := 500
+	totalLimit := 10000 // Prevent excessive API calls
+
+	// Get all orders with embedded SQLData from DB
+	companyID := c.Param("company_id")
+	log.Print(companyID)
+	orders, err := h.ordersService.FetchOrdersByCompanyID(companyID)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+
+	// If no orders found
+	if len(orders) == 0 {
+		return c.JSON(http.StatusNotFound, map[string]string{"error": "No orders found for this company"})
+	}
+
+	// Store all transactions
+	var allTransactions []models.LazadaTransaction
+	orderID := "" // Empty orderID to fetch all transactions at once
+
+	// Fetch all transactions first (pagination)
+	for len(allTransactions) < totalLimit {
+		transactions, err := h.paymentService.GetTransactions(startTime, endTime, orderID, offset, limit)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{
+				"message": "Failed to retrieve transactions",
+				"error":   err.Error(),
+			})
+		}
+
+		if len(transactions) == 0 {
+			break // No more transactions
+		}
+
+		allTransactions = append(allTransactions, transactions...)
+		offset += limit // Move to next batch
+
+		// Ensure we don't exceed totalLimit
+		if len(allTransactions) >= totalLimit {
+			allTransactions = allTransactions[:totalLimit]
+			break
+		}
+	}
+
+	// Map to store total released amounts per OrderID
+	paymentSumMap := make(map[int64]float64)
+
+	// Process transactions and sum up payments per OrderID
+	for _, transaction := range allTransactions {
+		orderIDInt, err := strconv.ParseInt(transaction.OrderNo, 10, 64)
+		if err != nil {
+			log.Printf("Error converting orderID '%s' to integer: %v", transaction.OrderNo, err)
+			continue
+		}
+
+		amountStr := strings.ReplaceAll(transaction.Amount, ",", "")
+		amount, err := strconv.ParseFloat(amountStr, 64)
+		if err != nil {
+			log.Printf("Error converting amount for Order %d: %v", orderIDInt, err)
+			continue
+		}
+
+		paymentSumMap[orderIDInt] += amount
+	}
+
+	// Assign total payments to each order's SQLData
+	for i := range orders {
+		if totalPayment, exists := paymentSumMap[orders[i].OrderID]; exists {
+			orders[i].TotalReleasedAmount = math.Round(totalPayment*100) / 100 // Round to 2 decimal places
+		} else {
+			orders[i].TotalReleasedAmount = 0.0
+		}
+	}
+
+	// Return updated orders with calculated TotalReleasedAmount
 	return c.JSON(http.StatusOK, orders)
 }

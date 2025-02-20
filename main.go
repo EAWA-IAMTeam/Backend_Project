@@ -44,25 +44,28 @@ func main() {
 	returnRepo := repositories.NewReturnRepository(iopClient, env.AppKey, env.AccessToken, db)
 	ordersRepo := repositories.NewOrdersRepository(iopClient, env.AppKey, env.AccessToken, db)
 	itemListRepo := repositories.NewItemListRepository(iopClient, env.AppKey, env.AccessToken, db)
+	paymentRepo := repositories.NewPaymentsRepository(iopClient, env.AppKey, env.AccessToken, db)
 
 	// Services
 	itemListService := services.NewItemListService(itemListRepo)
 	returnService := services.NewReturnService(returnRepo)
-	ordersService := services.NewOrdersService(ordersRepo, itemListService, returnService)
+	paymentService := services.NewPaymentService(paymentRepo)
+	ordersService := services.NewOrdersService(ordersRepo, itemListService, returnService, paymentService)
 
 	// Initialize return handler
 	returnHandler := handlers.NewReturnHandler(returnService)
 
 	// Initialize orders handler with all required services
-	ordersHandler := handlers.NewOrdersHandler(ordersService, itemListService, returnHandler)
+	ordersHandler := handlers.NewOrdersHandler(ordersService, itemListService, returnHandler, paymentService)
 
 	// Define API routes
 	e.GET("/orders/:company_id", ordersHandler.GetOrders)
 	e.GET("/orders/:company_id/:status", ordersHandler.GetOrders)
 	e.GET("/orders/:company_id/E", ordersHandler.FetchOrdersByCompanyID)
+	e.GET("/orders/:company_id/E1", ordersHandler.GetTransactionsByOrder)
 
 	// Start the server on IP 192.168.0.240 and port 8080
-	serverAddr := "192.168.0.240:8080"
+	serverAddr := "192.168.0.184:8000"
 	log.Printf("Server started at %s", serverAddr)
 	if err := e.Start(serverAddr); err != nil {
 		log.Fatalf("Failed to start server: %v", err)

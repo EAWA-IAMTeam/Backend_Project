@@ -35,6 +35,7 @@ type Order struct {
 	ExtraAttributes             string         `json:"extra_attributes"`
 	Remarks                     string         `json:"remarks"`
 	GiftMessage                 string         `json:"gift_message"`
+	TotalReleasedAmount         float64        `json:"total_released_amount"`
 	AddressShipping             Address        `json:"address_shipping"`
 	Items                       []Item         `json:"items"`
 	RefundStatus                []ReturnRefund `json:"refund_status"`
@@ -68,9 +69,9 @@ type SQLData struct {
 	//Platform string `json:"platform"` (set via prefix)
 	//Store string `json:"store"` (set via prefix)
 	//PlatformReleasedAmount float64 `json:"platform_released_amount"` //payment
-	//TotalReleasedAmount float64 `json:"total_released_amount"` //payment
-	RefundAmount     int    `json:"refund_amount"`
-	RefundReason     string `json:"reason_text"`
-	CreatedAt        string `json:"created_at"`
-	SystemUpdateTime string `json:"updated_at"`
+	TotalReleasedAmount float64 `json:"total_released_amount"` //payment
+	RefundAmount        int     `json:"refund_amount"`
+	RefundReason        string  `json:"reason_text"`
+	CreatedAt           string  `json:"created_at"`
+	SystemUpdateTime    string  `json:"updated_at"`
 }
