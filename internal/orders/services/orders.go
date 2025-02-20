@@ -7,7 +7,7 @@ import (
 )
 
 type OrdersService interface {
-	GetOrders(createdAfter string, offset int, limit int, status string) ([]models.Order, error)
+	GetOrders(createdAfter string, createdBefore string, offset int, limit int, status string, sort_direction string) ([]models.Order, int, error)
 	SaveOrder(order *models.Order, companyID string) error
 	FetchOrdersByCompanyID(companyID string) ([]models.Order, error)
 }
@@ -22,14 +22,14 @@ func NewOrdersService(repo repositories.OrdersRepository, itemListService ItemLi
 	return &ordersService{repo, itemListService, returnService}
 }
 
-func (s *ordersService) GetOrders(createdAfter string, offset int, limit int, status string) ([]models.Order, error) {
-	ordersData, err := s.repo.FetchOrders(createdAfter, offset, limit, status)
+func (s *ordersService) GetOrders(createdAfter string, createdBefore string, offset int, limit int, status string, sort_direction string) ([]models.Order, int, error) {
+	ordersData, err := s.repo.FetchOrders(createdAfter, createdBefore, offset, limit, status, sort_direction)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	if ordersData == nil || len(ordersData.Orders) == 0 {
-		return nil, nil
+		return nil, 0, nil
 	}
 
 	// Extract order IDs
@@ -41,7 +41,7 @@ func (s *ordersService) GetOrders(createdAfter string, offset int, limit int, st
 	// Fetch items for the orders
 	items, err := s.itemListService.GetItemList(orderIDs)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	// Map items to their respective orders
@@ -53,13 +53,24 @@ func (s *ordersService) GetOrders(createdAfter string, offset int, limit int, st
 		}
 
 		// Fetch and merge return data
-		returnData, err := s.returnService.ProcessReturn(fmt.Sprintf("%d", order.OrderID), "1", "1") // Adjust page_size if needed
-		if err == nil {
-			ordersData.Orders[i].RefundStatus = returnData // Ensure this matches the type in the Order struct
+		// Only process returns for orders with "returned" status
+		hasReturnedStatus := false
+		for _, status := range order.Statuses {
+			if status == "returned" {
+				hasReturnedStatus = true
+				break
+			}
+		}
+
+		if hasReturnedStatus {
+			returnData, err := s.returnService.ProcessReturn(fmt.Sprintf("%d", order.OrderID), "1", "1")
+			if err == nil {
+				ordersData.Orders[i].RefundStatus = returnData
+			}
 		}
 	}
 
-	return ordersData.Orders, nil
+	return ordersData.Orders, ordersData.CountTotal, nil
 }
 
 func (s *ordersService) SaveOrder(order *models.Order, companyID string) error {

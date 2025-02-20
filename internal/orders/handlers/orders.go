@@ -34,20 +34,33 @@ func (h *OrdersHandler) GetOrders(c echo.Context) error {
 	if createdAfter == "" {
 		createdAfter = "2024-02-01T22:44:30+08:00"
 	}
+	createdBefore := c.QueryParam("created_before")
+
+	sort_direction := c.QueryParam("sort_direction")
+	if sort_direction == "" {
+		sort_direction = "DESC" // Default to descending order
+	} else if sort_direction != "ASC" && sort_direction != "DESC" {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"message": "sort_direction must be either ASC or DESC",
+		})
+	}
 
 	var allOrders []models.Order
 	offset := 0
-	limit := 100      // API's maximum limit per call
-	totalLimit := 100 // Your internal limit for the operation
+	limit := 100       // API's maximum limit per call
+	totalLimit := 100  // Your internal limit for the operation
+	var totalCount int // Add at the top with other vars
 
 	for len(allOrders) < totalLimit {
-		orders, err := h.ordersService.GetOrders(createdAfter, offset, limit, status)
+		orders, count, err := h.ordersService.GetOrders(createdAfter, createdBefore, offset, limit, status, sort_direction)
 		if err != nil {
 			return c.JSON(http.StatusInternalServerError, map[string]string{
 				"message": "Failed to retrieve orders",
 				"error":   err.Error(),
 			})
 		}
+
+		totalCount = count // Store the count from the first response
 
 		if len(orders) == 0 {
 			break // No more orders to fetch
@@ -63,7 +76,11 @@ func (h *OrdersHandler) GetOrders(c echo.Context) error {
 	}
 
 	if len(allOrders) == 0 {
-		return c.JSON(http.StatusOK, map[string]string{"message": "No orders found"})
+		return c.JSON(http.StatusOK, map[string]interface{}{
+			"orders":     []models.Order{},
+			"counttotal": 0,
+			"count":      0,
+		})
 	}
 
 	// Save each order from the retrieved list, adding a placeholder for those with no items
@@ -84,17 +101,6 @@ func (h *OrdersHandler) GetOrders(c echo.Context) error {
 			})
 		}
 	}
-
-	// Log each order ID with status "returned"
-	for _, order := range allOrders {
-		if order.Statuses[0] == "returned" {
-			err := h.returnHandler.HandleReturnRequest(int(order.OrderID))
-			if err != nil {
-				log.Printf("Error processing return for order ID %d: %s", order.OrderID, err.Error())
-			}
-		}
-	}
-
 	// Extract order IDs
 	var orderIDs []string
 	for _, order := range allOrders {
@@ -119,7 +125,18 @@ func (h *OrdersHandler) GetOrders(c echo.Context) error {
 		}
 	}
 
-	return c.JSON(http.StatusOK, allOrders)
+	// Create response structure
+	response := struct {
+		CountTotal int            `json:"counttotal"`
+		Count      int            `json:"count"`
+		Orders     []models.Order `json:"orders"`
+	}{
+		CountTotal: totalCount,
+		Count:      len(allOrders),
+		Orders:     allOrders,
+	}
+
+	return c.JSON(http.StatusOK, response)
 }
 
 func (h *OrdersHandler) FetchOrdersByCompanyID(c echo.Context) error {

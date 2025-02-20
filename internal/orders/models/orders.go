@@ -1,7 +1,9 @@
 package models
 
 type OrdersData struct {
-	Orders []Order `json:"orders"`
+	CountTotal int     `json:"counttotal"`
+	Count      int     `json:"count"`
+	Orders     []Order `json:"orders"`
 }
 
 type Order struct {

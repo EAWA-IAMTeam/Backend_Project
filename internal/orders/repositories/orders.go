@@ -7,13 +7,12 @@ import (
 	"encoding/json"
 	"errors"
 	"log"
-	"math"
 	"strconv"
 	"strings"
 )
 
 type OrdersRepository interface {
-	FetchOrders(createdAfter string, offset int, limit int, status string) (*models.OrdersData, error)
+	FetchOrders(createdAfter string, createdBefore string, offset int, limit int, status string, sort_by string) (*models.OrdersData, error)
 	SaveOrder(order *models.Order, companyID string) error
 	FetchOrdersByCompanyID(companyID string) ([]models.Order, error)
 }
@@ -29,17 +28,28 @@ func NewOrdersRepository(client *sdk.IopClient, appKey, accessToken string, db *
 	return &ordersRepository{client, appKey, accessToken, db}
 }
 
-func (r *ordersRepository) FetchOrders(createdAfter string, offset int, limit int, status string) (*models.OrdersData, error) {
+func (r *ordersRepository) FetchOrders(createdAfter string, createdBefore string, offset int, limit int, status string, sort_direction string) (*models.OrdersData, error) {
 	queryParams := map[string]string{
 		"appKey":      r.appKey,
 		"accessToken": r.accessToken,
 	}
 
-	r.client.AddAPIParam("created_after", createdAfter)
+	// Only add date parameters if they are provided
+	if createdAfter != "" {
+		r.client.AddAPIParam("created_after", createdAfter)
+	}
+	if createdBefore != "" {
+		r.client.AddAPIParam("created_before", createdBefore)
+	}
+
 	r.client.AddAPIParam("offset", strconv.Itoa(offset))
 	r.client.AddAPIParam("limit", strconv.Itoa(limit))
 	if status != "" {
 		r.client.AddAPIParam("status", status)
+	}
+
+	if sort_direction != "" {
+		r.client.AddAPIParam("sort_direction", sort_direction)
 	}
 
 	resp, err := r.client.Execute("/orders/get", "GET", queryParams)
@@ -54,6 +64,8 @@ func (r *ordersRepository) FetchOrders(createdAfter string, offset int, limit in
 		log.Println("JSON Unmarshal Error:", err)
 		return nil, err
 	}
+
+	log.Printf("API response: %+v", apiResponse.CountTotal)
 
 	if apiResponse.Orders == nil {
 		log.Println("API response `data` field is missing or null")
@@ -70,7 +82,7 @@ func (r *ordersRepository) SaveOrder(order *models.Order, companyID string) erro
 
 	// Check if the order already exists
 	var exists bool
-	err := r.DB.QueryRow("SELECT EXISTS(SELECT 1 FROM \"Order\" WHERE id = $1 AND company_id = $2)", order.OrderID, companyID).Scan(&exists)
+	err := r.DB.QueryRow("SELECT EXISTS(SELECT 1 FROM \"Order\" WHERE platform_order_id = $1 AND company_id = $2)", order.OrderID, companyID).Scan(&exists)
 	if err != nil {
 		log.Printf("Error checking order existence: %v", err)
 		return err
@@ -91,12 +103,12 @@ func (r *ordersRepository) SaveOrder(order *models.Order, companyID string) erro
 
 	if exists {
 		// Update existing order
-		query := `UPDATE "Order" SET store_id = $2, tracking_id = $3, status = $4, item_list = $5, data = $6 WHERE id = $1 AND company_id = $7`
-		_, err = r.DB.Exec(query, order.OrderID, order.ItemsCount, order.Items[0].TrackingCode, order.Statuses[0], string(itemListJSON), string(sqlDataJSON), companyID)
+		query := `UPDATE "Order" SET store_id = $2, tracking_id = $3, status = $4, item_list = $5, data = $6, order_date = $7 WHERE platform_order_id = $1 AND company_id = $8`
+		_, err = r.DB.Exec(query, order.OrderID, order.ItemsCount, order.Items[0].TrackingCode, order.Statuses[0], string(itemListJSON), string(sqlDataJSON), companyID, order.CreatedAt)
 	} else {
 		// Insert new order
-		query := `INSERT INTO "Order" (id, store_id, tracking_id, status, item_list, data, company_id) VALUES ($1, $2, $3, $4, $5, $6, $7)`
-		_, err = r.DB.Exec(query, order.OrderID, order.ItemsCount, order.Items[0].TrackingCode, order.Statuses[0], string(itemListJSON), string(sqlDataJSON), companyID)
+		query := `INSERT INTO "Order" (platform_order_id, store_id, tracking_id, status, item_list, data, company_id, order_date) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
+		_, err = r.DB.Exec(query, order.OrderID, order.ItemsCount, order.Items[0].TrackingCode, order.Statuses[0], string(itemListJSON), string(sqlDataJSON), companyID, order.CreatedAt)
 	}
 
 	if err != nil {
@@ -108,12 +120,12 @@ func (r *ordersRepository) SaveOrder(order *models.Order, companyID string) erro
 }
 
 func ConvertOrderToSQLData(order models.Order) models.SQLData {
-	// Ensure there is at least one element in the RefundStatus slice before accessing
 	var refundAmount float64
 	var refundReason string
 
 	if len(order.RefundStatus) > 0 {
-		refundAmount = math.Round(float64(order.RefundStatus[0].RefundAmount)/100*100) / 100 // Convert to 2 decimal places
+		// Convert from ReturnRefund struct
+		refundAmount = float64(order.RefundStatus[0].RefundAmount)
 		refundReason = order.RefundStatus[0].ReasonText
 	}
 
@@ -133,8 +145,8 @@ func ConvertOrderToSQLData(order models.Order) models.SQLData {
 		TotalPrice:                order.Price,
 		Currency:                  "MYR",
 		Status:                    order.Statuses,
-		RefundAmount:              int(refundAmount), // Updated refund amount with 2 decimal places
-		RefundReason:              refundReason,      // Updated refund reason
+		RefundAmount:              int(refundAmount),
+		RefundReason:              refundReason,
 		CreatedAt:                 order.CreatedAt,
 		SystemUpdateTime:          order.UpdatedAt,
 	}
@@ -142,7 +154,7 @@ func ConvertOrderToSQLData(order models.Order) models.SQLData {
 
 func (r *ordersRepository) FetchOrdersByCompanyID(companyID string) ([]models.Order, error) {
 	query := `
-		SELECT id, tracking_id, status, data, item_list
+		SELECT platform_order_id, tracking_id, status, data, item_list
 		FROM "Order"
 		WHERE company_id = $1`
 
@@ -211,6 +223,13 @@ func (r *ordersRepository) FetchOrdersByCompanyID(companyID string) ([]models.Or
 		order.CreatedAt = sqlData.CreatedAt
 		order.UpdatedAt = sqlData.SystemUpdateTime
 		order.Statuses = sqlData.Status // Update with full status array from SQLData
+
+		if sqlData.RefundAmount > 0 {
+			order.RefundStatus = []models.ReturnRefund{{
+				RefundAmount: sqlData.RefundAmount,
+				ReasonText:   sqlData.RefundReason,
+			}}
+		}
 
 		orders = append(orders, order)
 	}
