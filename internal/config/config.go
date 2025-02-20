@@ -14,9 +14,9 @@ type Config struct {
 	DbName      string
 	DbPort      string
 	DbSSLMode   string
-	appKey      string
-	appSecret   string
-	accessToken string
+	AppKey      string
+	AppSecret   string
+	AccessToken string
 }
 
 func LoadConfig() *Config {
@@ -25,17 +25,20 @@ func LoadConfig() *Config {
 		log.Printf("Error loading .env file: %v\n", err)
 	}
 
-	return &Config{
+	config := &Config{
 		DbHost:      getEnv("DB_HOST", "localhost"),
 		DbUser:      getEnv("DB_USER", "postgres"),
 		DbPassword:  getEnv("DB_PASSWORD", "postgres"),
 		DbName:      getEnv("DB_NAME", "postgres"),
 		DbPort:      getEnv("DB_PORT", "5432"),
 		DbSSLMode:   getEnv("DB_SSLMODE", "disable"),
-		appKey:      getEnv("APP_KEY", ""),
-		appSecret:   getEnv("APP_SECRET", ""),
-		accessToken: getEnv("ACCESS_TOKEN", ""),
+		AppKey:      getEnv("App_Key", ""),
+		AppSecret:   getEnv("App_Secret", ""),
+		AccessToken: getEnv("Access_Token", ""),
 	}
+
+	log.Printf("Loaded Config: %+v\n", config) // Debugging line
+	return config
 }
 
 func getEnv(key, fallback string) string {

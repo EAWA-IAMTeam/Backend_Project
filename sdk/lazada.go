@@ -115,6 +115,10 @@ func (lc *IopClient) ChangeRegion(region string) *IopClient {
 
 // AddAPIParam setter
 func (lc *IopClient) AddAPIParam(key string, val string) *IopClient {
+	// Initialize the map if it is nil
+	if lc.APIParams == nil {
+		lc.APIParams = make(map[string]string)
+	}
 	lc.APIParams[key] = val
 	return lc
 }
@@ -159,6 +163,7 @@ type Response struct {
 	Message   string          `json:"message"`
 	RequestID string          `json:"request_id"`
 	Data      json.RawMessage `json:"data"`
+	Result    json.RawMessage `json:"result"`
 }
 
 // ResponseError defines a error response
