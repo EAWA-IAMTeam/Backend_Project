@@ -104,7 +104,7 @@ func (r *ordersRepository) SaveOrder(order *models.Order, companyID string) erro
 	if exists {
 		// Update existing order
 		query := `UPDATE "Order" SET store_id = $2, tracking_id = $3, status = $4, item_list = $5, data = $6, order_date = $7 WHERE platform_order_id = $1 AND company_id = $8`
-		_, err = r.DB.Exec(query, order.OrderID, order.ItemsCount, order.Items[0].TrackingCode, order.Statuses[0], string(itemListJSON), string(sqlDataJSON), companyID, order.CreatedAt)
+		_, err = r.DB.Exec(query, order.OrderID, order.ItemsCount, order.Items[0].TrackingCode, order.Statuses[0], string(itemListJSON), string(sqlDataJSON), order.CreatedAt, companyID)
 	} else {
 		// Insert new order
 		query := `INSERT INTO "Order" (platform_order_id, store_id, tracking_id, status, item_list, data, company_id, order_date) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
