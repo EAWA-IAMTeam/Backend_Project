@@ -63,6 +63,10 @@ func (or *OrderRepository) GetOrdersByCompany(companyID int8, page, limit int) (
 			return nil, 0, err
 		}
 
+		// // Log the raw JSON data
+		// log.Printf("Raw data JSON: %s", string(dataJson))
+		// log.Printf("Raw item list JSON: %s", string(OrderItems))
+
 		err = json.Unmarshal(dataJson, &order.Data)
 		if err != nil {
 			return nil, 0, err

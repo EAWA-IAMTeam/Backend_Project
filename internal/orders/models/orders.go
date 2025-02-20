@@ -19,34 +19,26 @@ type Order struct {
 }
 
 type Data struct {
-	CustomerName              string  `json:"first_name"`
-	CustomerPhone             string  `json:"phone"`
-	CustomerAddress           string  `json:"address1"`
-	CourierService            string  `json:"CourierService"`
-	TransactionFee            float64 `json:"transaction_fee"`
-	ShippingFee               float64 `json:"shipping_fee"`
-	ProcessFee                float64 `json:"process_fee"`
-	ServiceFee                float64 `json:"service_fee"`
-	SellerDiscount            float64 `json:"seller_discount"`
-	PlatformDiscount          float64 `json:"platform_discount"`
-	ShippingFeeDiscountSeller float64 `json:"shipping_fee_discount_seller"`
-	TotalPrice                string  `json:"price"`
-	Currency                  string  `json:"currency"`
-	//Platform string `json:"platform"` (set via prefix)
-	//Store string `json:"store"` (set via prefix)
-	//PlatformReleasedAmount float64 `json:"platform_released_amount"` //payment
-	//TotalReleasedAmount float64 `json:"total_released_amount"` //payment
-	RefundAmount     int    `json:"refund_amount"`
-	RefundReason     string `json:"reason_text"`
-	CreatedAt        string `json:"created_at"`
-	SystemUpdateTime string `json:"updated_at"`
+	OrderID                   int64    `json:"order_id"`
+	CustomerName              string   `json:"CustomerName"`
+	CustomerPhone             string   `json:"CustomerPhone"`
+	CustomerAddress           string   `json:"CustomerAddress"`
+	CourierService            string   `json:"CourierService"`
+	TransactionFee            float64  `json:"TransactionFee"`
+	ShippingFee               float64  `json:"ShippingFee"`
+	ProcessFee                float64  `json:"ProcessFee"`
+	ServiceFee                float64  `json:"service_fee"`
+	SellerDiscount            float64  `json:"seller_discount"`
+	PlatformDiscount          float64  `json:"platform_discount"`
+	ShippingFeeDiscountSeller float64  `json:"shipping_fee_discount_seller"`
+	TotalPrice                string   `json:"TotalAmount"`
+	Currency                  string   `json:"currency"`
+	RefundAmount              int      `json:"refund_amount"`
+	RefundReason              string   `json:"reason_text"`
+	CreatedAt                 string   `json:"created_at"`
+	SystemUpdateTime          string   `json:"updated_at"`
+	Statuses                  []string `json:"statuses"`
 }
-
-// type ItemList struct {
-// 	OrderNumber int64  `json:"order_number"`
-// 	OrderID     int64  `json:"order_id"`
-// 	OrderItems  []Item `json:"order_items"`
-// }
 
 type Item struct {
 	OrderItemID               int64   `json:"order_item_id"`
@@ -66,7 +58,6 @@ type Item struct {
 	ReturnStatus              string  `json:"return_status"`
 	ReturnReason              string  `json:"reason"`
 	ImageUrl                  string  `json:"product_main_image"`
-	// Add other fields as necessary based on the JSON structure
 }
 
 type Address struct {
