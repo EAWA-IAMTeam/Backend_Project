@@ -40,11 +40,6 @@ type MergeProduct struct {
 	StoreProducts []StoreProduct `json:"store_products"`
 }
 
-type ProductRequest struct {
-	StoreID  int64          `json:"store_id"`
-	Products []StoreProduct `json:"products" validate:"required,dive"`
-}
-
 type InsertResult struct {
 	Inserted   int      `json:"inserted"`
 	Duplicates []string `json:"duplicates"`

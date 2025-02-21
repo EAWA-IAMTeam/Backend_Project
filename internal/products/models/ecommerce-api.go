@@ -1,11 +1,12 @@
 package models
 
-// Lazada
+// Generalized Product Struct
 type Product struct {
-	ItemID    	int      `json:"item_id"`
+	ItemID    	int64    `json:"item_id"`
+	StoreID   	int64    `json:"store_id"`
 	Name        string 	 `json:"name"`
 	Description string   `json:"description"`
-	Images     	[]string `json:"images"` // List of product images
+	Images     	[]string `json:"images"`
 	Skus       	[]Sku    `json:"skus"`
 	Quantity	int      `json:"quantity"`
 }
@@ -13,26 +14,25 @@ type Product struct {
 type Sku struct {
 	Status       string   `json:"status"`
 	ShopSku      string   `json:"ShopSku"`
-	Images       []string `json:"Images"` // List of SKU images
+	Images       []string `json:"Images"`
 	Quantity     int      `json:"quantity"`
 	Price        float64  `json:"price"`
 	SpecialPrice float64  `json:"special_price"`
 }
 
-// API Response Struct
+// Lazada API Response Product Struct
 type ApiResponse struct {
 	Code string `json:"code"`
 	Data struct {
 		Products []struct {
-			ItemID      int             `json:"item_id"`
-			Images      []string          `json:"images"`      // API sends as string (needs decoding)
+			ItemID      int64           `json:"item_id"`
+			Images      []string        `json:"images"`      
 			Skus        []Sku           `json:"skus"`
-			Attributes  Attributes      `json:"attributes"`  // Separate struct for attributes
+			Attributes  Attributes      `json:"attributes"` 
 		} `json:"products"`
 	} `json:"data"`
 }
 
-// Lazada Attributes Struct
 type Attributes struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`

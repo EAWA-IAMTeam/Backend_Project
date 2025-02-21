@@ -33,7 +33,7 @@ func main() {
 
 	// Apply middleware
 	e.Use(middleware.CORSConfig())
-	e.Use(middleware.RequestLoggerMiddleware) // 👈 Add API logging middleware
+	e.Use(middleware.RequestLoggerMiddleware) // API logging middleware
 
 	productRepo := repositories.NewProductRepository(db)
 	productService := services.NewProductService(productRepo)
@@ -41,16 +41,15 @@ func main() {
 
 	// Define routes
 	e.GET("/products/stock-item/:company_id", productHandler.GetStockItemsByCompany)
+	e.POST("/products/stock-item/:company_id", productHandler.PostStockItemsByCompany)
 	e.GET("/products/store-products/:company_id", productHandler.GetProductsByCompany)
 	e.POST("/products/store-products", productHandler.InsertProducts)
+	e.GET("/products/mapped-products/:company_id", productHandler.GetMappedProducts)
+	e.DELETE("products/mapped-product", productHandler.RemoveMappedProducts)
+	e.DELETE("products/mapped-products", productHandler.RemoveMappedProductsBatch)
 
-	// TODO: Quantity 0?
-	e.GET("/products/mapped/:company_id", productHandler.GetMappedProducts)
-	e.GET("/products/unmapped/:company_id", productHandler.GetUnmappedProducts)
-
-	// TODO: need store id and sku to remove
-	e.DELETE("products/store/:store_id/product/:sku", productHandler.RemoveMappedProducts)
-	e.DELETE("products/store/:store_id", productHandler.RemoveMappedProductsBatch)
+	// TODO: Fetch the products from all platforms according to the company's store by using the access token in database
+	e.GET("/products/unmapped-products/:company_id", productHandler.GetUnmappedProducts)
 
 	// Start server
 	port := "7000"

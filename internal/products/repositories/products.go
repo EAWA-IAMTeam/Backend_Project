@@ -19,7 +19,7 @@ func NewProductRepository(db *sql.DB) *ProductRepository {
 }
 
 // GetStockItemsByCompany fetches stock items by company ID
-func (pr *ProductRepository) GetStockItemsByCompany(companyID int) ([]*models.StockItem, error) {
+func (pr *ProductRepository) GetStockItemsByCompany(companyID int64) ([]*models.StockItem, error) {
 	query := `
         SELECT id, company_id, stock_code, stock_control, ref_price, ref_cost, weight, 
                height, width, length, variation1, variation2, quantity, reserved_quantity,
@@ -50,8 +50,92 @@ func (pr *ProductRepository) GetStockItemsByCompany(companyID int) ([]*models.St
 	return stockItems, nil
 }
 
+func (pr *ProductRepository) InsertStockItemsByCompany(companyID int64, stockItems []models.StockItem) error {
+	tx, err := pr.DB.Begin()
+	if err != nil {
+		fmt.Println("Error starting transaction:", err)
+		return err
+	}
+
+	query := `
+		INSERT INTO stockitem 
+		(company_id, ref_price, ref_cost, quantity, reserved_quantity, stock_code, stock_control, 
+		weight, height, width, length, variation1, variation2, platform, description, status, created_at, updated_at) 
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, NOW(), NOW())
+		ON CONFLICT (company_id, stock_code) 
+		DO UPDATE SET 
+			ref_price = EXCLUDED.ref_price,
+			ref_cost = EXCLUDED.ref_cost,
+			quantity = EXCLUDED.quantity,
+			reserved_quantity = EXCLUDED.reserved_quantity,
+			stock_control = EXCLUDED.stock_control,
+			weight = EXCLUDED.weight,
+			height = EXCLUDED.height,
+			width = EXCLUDED.width,
+			length = EXCLUDED.length,
+			variation1 = EXCLUDED.variation1,
+			variation2 = EXCLUDED.variation2,
+			platform = EXCLUDED.platform,
+			description = EXCLUDED.description,
+			status = EXCLUDED.status,
+			updated_at = NOW()
+	`
+
+	stmt, err := tx.Prepare(query)
+	if err != nil {
+		fmt.Println("Error preparing statement:", err)
+		tx.Rollback()
+		return err
+	}
+	defer stmt.Close()
+
+	stockCodes := make(map[string]bool)
+
+	for _, item := range stockItems {
+		stockCodes[item.StockCode] = true
+		_, err := stmt.Exec(
+			companyID, item.RefPrice, item.RefCost, item.Quantity, item.ReservedQuantity,
+			item.StockCode, item.StockControl, item.Weight, item.Height, item.Width, item.Length,
+			item.Variation1, item.Variation2, item.Platform, item.Description, item.Status,
+		)
+		if err != nil {
+			fmt.Println("Error executing insert query:", err)
+			tx.Rollback()
+			return err
+		}
+	}
+
+	// Remove stock items not in the request
+	deleteQuery := `
+		DELETE FROM stockitem 
+		WHERE company_id = $1 AND stock_code NOT IN (SELECT unnest($2::text[]))
+	`
+
+	stockCodeList := make([]string, 0, len(stockCodes))
+	for code := range stockCodes {
+		stockCodeList = append(stockCodeList, code)
+	}
+
+	fmt.Println("Deleting stock items not in request for company:", companyID)
+	_, err = tx.Exec(deleteQuery, companyID, pq.Array(stockCodeList))
+	if err != nil {
+		fmt.Println("Error executing delete query:", err)
+		tx.Rollback()
+		return err
+	}
+
+	if err := tx.Commit(); err != nil {
+		fmt.Println("Error committing transaction:", err)
+		return err
+	}
+
+	fmt.Println("Stock items inserted/updated successfully for company:", companyID)
+	return nil
+}
+
+
 // GetProductsByCompany fetches products by company ID
-func (pr *ProductRepository) GetProductsByCompany(companyID int) ([]*models.MergeProduct, error) {
+func (pr *ProductRepository) GetProductsByCompany(companyID int64) ([]*models.MergeProduct, error) {
 	// Step 1: Fetch all store IDs for the given company
 	storeQuery := `SELECT id FROM store WHERE company_id = $1`
 	storeRows, err := pr.DB.Query(storeQuery, companyID)
@@ -112,7 +196,7 @@ func (pr *ProductRepository) GetProductsByCompany(companyID int) ([]*models.Merg
 				storeProduct.ImageURL = []string{} // Ensure it's an empty slice on error
 			}
 		} else {
-			storeProduct.ImageURL = []string{} // ✅ Set empty slice if imageURLs is empty
+			storeProduct.ImageURL = []string{} // Set empty slice if imageURLs is empty
 		}
 
 		if _, exists := stockItemsMap[stockItem.StockItemID]; !exists {
@@ -139,14 +223,12 @@ func (pr *ProductRepository) InsertProductBatch(products []*models.StoreProduct)
 		Duplicates: make([]string, 0),
 	}
 
-	// Start a transaction
 	tx, err := pr.DB.Begin()
 	if err != nil {
 		return result, err
 	}
 	defer tx.Rollback()
 
-	// Prepare the insert statement
 	stmt, err := tx.Prepare(`
         INSERT INTO storeproduct (store_id, stock_item_id, price, discounted_price, sku, currency, status, media_url)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -177,7 +259,6 @@ func (pr *ProductRepository) InsertProductBatch(products []*models.StoreProduct)
 			return result, err
 		}
 
-		// Insert the product
 		res, err := stmt.Exec(
 			product.StoreID,
 			product.StockItemID,
@@ -200,7 +281,6 @@ func (pr *ProductRepository) InsertProductBatch(products []*models.StoreProduct)
 		result.Inserted += int(affected)
 	}
 
-	// Commit the transaction
 	if err := tx.Commit(); err != nil {
 		return result, err
 	}
@@ -209,7 +289,7 @@ func (pr *ProductRepository) InsertProductBatch(products []*models.StoreProduct)
 }
 
 // GetStoreByCompany fetches Store IDs for a given company from the database with platform as key
-func (r *ProductRepository) GetStoreByCompany(companyID string) (map[string][]int64, error) {
+func (r *ProductRepository) GetStoreByCompany(companyID int64) (map[string][]int64, error) {
 	query := "SELECT id, platform FROM store WHERE company_id = $1"
 	rows, err := r.DB.Query(query, companyID)
 	if err != nil {
@@ -231,7 +311,6 @@ func (r *ProductRepository) GetStoreByCompany(companyID string) (map[string][]in
 		storeMap[platform] = append(storeMap[platform], id)
 	}
 
-	// Check for iteration errors
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("error iterating rows: %w", err)
 	}
@@ -240,7 +319,7 @@ func (r *ProductRepository) GetStoreByCompany(companyID string) (map[string][]in
 }
 
 // GetStoreSkus fetches SKUs for a given store from the database
-func (r *ProductRepository) GetStoreSkus(storeID string) (map[string]bool, error) {
+func (r *ProductRepository) GetStoreSkus(storeID int64) (map[string]bool, error) {
 	query := "SELECT sku FROM storeproduct WHERE store_id = $1"
 	rows, err := r.DB.Query(query, storeID)
 	if err != nil {
@@ -260,18 +339,18 @@ func (r *ProductRepository) GetStoreSkus(storeID string) (map[string]bool, error
 	return skus, rows.Err()
 }
 
-func (r *ProductRepository) DeleteMappedProductsBySKU(storeID, sku string) (int64, error) {
+func (r *ProductRepository) DeleteMappedProductsBySKU(storeID int64, sku string) (int64, error) {
 	query := "DELETE FROM storeproduct WHERE store_id = $1 AND sku = $2"
 	result, err := r.DB.Exec(query, storeID, sku)
 	if err != nil {
 		return 0, err
 	}
 
-	rowsAffected, _ := result.RowsAffected() // Get number of affected rows
+	rowsAffected, _ := result.RowsAffected()
 	return rowsAffected, nil
 }
 
-func (r *ProductRepository) DeleteMappedProductsBySKUs(storeID string, skus []string) ([]string, []string, error) {
+func (r *ProductRepository) DeleteMappedProductsBySKUs(storeID int64, skus []string) ([]string, []string, error) {
 	if len(skus) == 0 {
 		return nil, nil, errors.New("no SKUs provided")
 	}

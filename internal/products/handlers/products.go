@@ -1,7 +1,9 @@
 package handlers
 
 import (
+	"backend_project/internal/products/models"
 	"backend_project/internal/products/services"
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -19,9 +21,11 @@ func NewProductHandler(ps *services.ProductService) *ProductHandler {
 
 // GetStockItemsByCompany handles fetching stock items by company ID
 func (ph *ProductHandler) GetStockItemsByCompany(c echo.Context) error {
-	companyID, err := strconv.Atoi(c.Param("company_id"))
+	var companyID int64
+	var err error
+	
+	companyID, err = strconv.ParseInt(c.Param("company_id"), 10, 64)
 	if err != nil {
-		log.Printf("Failed to convert company_id to int: %v", err)
 		return c.JSON(http.StatusBadRequest, map[string]string{"message": "Invalid company_id"})
 	}
 
@@ -34,11 +38,48 @@ func (ph *ProductHandler) GetStockItemsByCompany(c echo.Context) error {
 	return c.JSON(http.StatusOK, stockItems)
 }
 
+// PostStockItemsByCompany handles inserting stock items for a specific company
+func (ph *ProductHandler) PostStockItemsByCompany(c echo.Context) error {
+	var companyID int64
+	var err error
+
+	companyID, err = strconv.ParseInt(c.Param("company_id"), 10, 64)
+	if err != nil {
+		fmt.Println("Error parsing company_id:", err)
+		return c.JSON(http.StatusBadRequest, map[string]string{"message": "Invalid company_id"})
+	}
+
+	var request struct {
+		StockItems []models.StockItem `json:"stock_items"`
+	}
+
+	if err := c.Bind(&request); err != nil {
+		fmt.Println("Error binding request body:", err)
+		return c.JSON(http.StatusBadRequest, map[string]string{"message": "Invalid request body"})
+	}
+
+	if len(request.StockItems) == 0 {
+		fmt.Println("Error: Stock items list is empty")
+		return c.JSON(http.StatusBadRequest, map[string]string{"message": "Stock items cannot be empty"})
+	}
+
+	err = ph.ProductService.CreateStockItemsByCompany(companyID, request.StockItems)
+	if err != nil {
+		fmt.Println("Error in CreateStockItemsByCompany:", err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"message": "Failed to post stock items"})
+	}
+
+	return c.JSON(http.StatusOK, map[string]string{"message": "Stock items successfully posted"})
+}
+
+
 // GetProductsByStore handles fetching products by store ID
 func (ph *ProductHandler) GetProductsByCompany(c echo.Context) error {
-	companyID, err := strconv.Atoi(c.Param("company_id"))
+	var companyID int64
+	var err error
+	
+	companyID, err = strconv.ParseInt(c.Param("company_id"), 10, 64)
 	if err != nil {
-		log.Printf("Failed to convert company_id to int: %v", err)
 		return c.JSON(http.StatusBadRequest, map[string]string{"message": "Invalid company_id"})
 	}
 
@@ -75,9 +116,12 @@ func (ph *ProductHandler) InsertProducts(c echo.Context) error {
 
 // GetMappedProducts handles API requests for mapped products
 func (ph *ProductHandler) GetMappedProducts(c echo.Context) error {
-	companyID := c.Param("company_id")
-	if companyID == "" {
-		return c.JSON(http.StatusBadRequest, map[string]string{"message": "company_id is required"})
+	var companyID int64
+	var err error
+	
+	companyID, err = strconv.ParseInt(c.Param("company_id"), 10, 64)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"message": "Invalid company_id"})
 	}
 
 	products, err := ph.ProductService.FetchMappedProducts(companyID)
@@ -90,10 +134,14 @@ func (ph *ProductHandler) GetMappedProducts(c echo.Context) error {
 }
 
 // GetUnmappedProducts handles API requests for mapped products
+// TODO: Fetch the products from all platforms according to the company's store by using the access token in database
 func (ph *ProductHandler) GetUnmappedProducts(c echo.Context) error {
-	companyID := c.Param("company_id")
-	if companyID == "" {
-		return c.JSON(http.StatusBadRequest, map[string]string{"message": "company_id is required"})
+	var companyID int64
+	var err error
+	
+	companyID, err = strconv.ParseInt(c.Param("company_id"), 10, 64)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"message": "Invalid company_id"})
 	}
 
 	products, err := ph.ProductService.FetchUnmappedProducts(companyID)
@@ -107,20 +155,18 @@ func (ph *ProductHandler) GetUnmappedProducts(c echo.Context) error {
 
 // RemoveMappedProducts handles API requests to delete mapped products
 func (ph *ProductHandler) RemoveMappedProducts(c echo.Context) error {
-	storeID := c.Param("store_id")
-	sku := c.Param("sku")
-
-	if storeID == "" {
-		return c.JSON(http.StatusBadRequest, map[string]string{"message": "store_id is required"})
+	var request struct {
+		StoreID int64    `json:"store_id"`
+		SKU     string `json:"sku"`     
 	}
 
-	if sku == "" {
-		return c.JSON(http.StatusBadRequest, map[string]string{"message": "sku is required"})
+	// Parse JSON body
+	if err := c.Bind(&request); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"message": "Invalid request body"})
 	}
 
-	rowsAffected, err := ph.ProductService.DeleteMappedProducts(storeID, sku)
+	rowsAffected, err := ph.ProductService.DeleteMappedProducts(request.StoreID, request.SKU)
 	if err != nil {
-		log.Printf("Error removing mapped product (store_id: %s, sku: %s): %v", storeID, sku, err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"message": "Failed to remove mapped product"})
 	}
 
@@ -133,14 +179,9 @@ func (ph *ProductHandler) RemoveMappedProducts(c echo.Context) error {
 
 // RemoveMappedProductsBatch handles API requests to delete multiple mapped products
 func (ph *ProductHandler) RemoveMappedProductsBatch(c echo.Context) error {
-	storeID := c.Param("store_id")
-
-	if storeID == "" {
-		return c.JSON(http.StatusBadRequest, map[string]string{"message": "store_id is required"})
-	}
-
 	var request struct {
-		SKUs []string `json:"skus"`
+		StoreID int64   `json:"store_id"`
+		SKUs    []string `json:"skus"`
 	}
 
 	// Parse JSON body
@@ -152,17 +193,18 @@ func (ph *ProductHandler) RemoveMappedProductsBatch(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"message": "At least one SKU is required"})
 	}
 
-	deletedSKUs, failedSKUs, err := ph.ProductService.DeleteMappedProductsBatch(storeID, request.SKUs)
+	// Use request.StoreID instead of undefined storeID
+	deletedSKUs, failedSKUs, err := ph.ProductService.DeleteMappedProductsBatch(request.StoreID, request.SKUs)
 	if err != nil {
-		log.Printf("Error removing mapped products (store_id: %s): %v", storeID, err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"message": "Failed to remove mapped products"})
 	}
 
 	response := map[string]interface{}{
-		"message":        "Mapped products processed",
-		"deleted_skus":   deletedSKUs,
-		"failed_skus":    failedSKUs,
+		"message":      "Mapped products processed",
+		"deleted_skus": deletedSKUs,
+		"failed_skus":  failedSKUs,
 	}
 
 	return c.JSON(http.StatusOK, response)
 }
+

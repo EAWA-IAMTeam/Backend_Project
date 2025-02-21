@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"io"
 	"log"
-	"strconv"
 
 	"github.com/labstack/echo/v4"
 )
@@ -21,12 +20,17 @@ func NewProductService(pr *repositories.ProductRepository) *ProductService {
 }
 
 // FetchStockItemsByCompany retrieves stock items by company ID
-func (ps *ProductService) FetchStockItemsByCompany(companyID int) ([]*models.StockItem, error) {
+func (ps *ProductService) FetchStockItemsByCompany(companyID int64) ([]*models.StockItem, error) {
 	return ps.ProductRepo.GetStockItemsByCompany(companyID)
 }
 
+// CreateStockItemsByCompany inserts stock items for a specific company
+func (ps *ProductService) CreateStockItemsByCompany(companyID int64, stockItems []models.StockItem) error {
+	return ps.ProductRepo.InsertStockItemsByCompany(companyID, stockItems)
+}
+
 // FetchProductsByStore retrieves products by store ID
-func (ps *ProductService) FetchProductsByCompany(companyID int) ([]*models.MergeProduct, error) {
+func (ps *ProductService) FetchProductsByCompany(companyID int64) ([]*models.MergeProduct, error) {
 	return ps.ProductRepo.GetProductsByCompany(companyID)
 }
 
@@ -54,8 +58,8 @@ func (ps *ProductService) InsertProducts(req []*models.StoreProduct) (*models.In
 }
 
 // FetchMappedProducts retrieves products that are already mapped (removed from external API)
-func (ps *ProductService) FetchMappedProducts(companyID string) ([]models.Product, error) {
-	// TODO: get mapped products from all platforms and return
+// TODO: get mapped products from all platforms and return
+func (ps *ProductService) FetchMappedProducts(companyID int64) ([]models.Product, error) {
 	var products []models.Product
 
 	storeIDs, err := ps.ProductRepo.GetStoreByCompany(companyID)
@@ -64,7 +68,7 @@ func (ps *ProductService) FetchMappedProducts(companyID string) ([]models.Produc
 	}
 	
 	for _, storeID := range storeIDs["Lazada"] {
-		lazadaProducts, err := ps.FetchLazadaMappedProducts(strconv.FormatInt(storeID, 10))
+		lazadaProducts, err := ps.FetchLazadaMappedProducts(storeID)
 		if err != nil {
 			return nil, err
 		}
@@ -99,8 +103,8 @@ func (ps *ProductService) FetchMappedProducts(companyID string) ([]models.Produc
 }
 
 // FetchMappedProducts retrieves products that are already mapped (removed from external API)
-func (ps *ProductService) FetchUnmappedProducts(companyID string) ([]models.Product, error) {
-	// TODO: get mapped products from all platforms and return
+// TODO: get mapped products from all platforms and return
+func (ps *ProductService) FetchUnmappedProducts(companyID int64) ([]models.Product, error) {
 	var products []models.Product
 
 	storeIDs, err := ps.ProductRepo.GetStoreByCompany(companyID)
@@ -108,8 +112,9 @@ func (ps *ProductService) FetchUnmappedProducts(companyID string) ([]models.Prod
 		return nil, err
 	}
 	
+	// TODO: Fetch the products from all platforms according to the company's store by using the access token in database
 	for _, storeID := range storeIDs["Lazada"] {
-		lazadaProducts, err := ps.FetchLazadaUnmappedProducts(strconv.FormatInt(storeID, 10))
+		lazadaProducts, err := ps.FetchLazadaUnmappedProducts(storeID)
 		if err != nil {
 			return nil, err
 		}
@@ -144,12 +149,12 @@ func (ps *ProductService) FetchUnmappedProducts(companyID string) ([]models.Prod
 }
 
 // Delete products that are MAPPED
-func (ps *ProductService) DeleteMappedProducts(storeID string, sku string) (int64, error) {
+func (ps *ProductService) DeleteMappedProducts(storeID int64, sku string) (int64, error) {
 	return ps.ProductRepo.DeleteMappedProductsBySKU(storeID, sku)
 }
 
 // DeleteMappedProductsBatch deletes multiple mapped products and returns successfully deleted and failed SKUs
-func (ps *ProductService) DeleteMappedProductsBatch(storeID string, skus []string) ([]string, []string, error) {
+func (ps *ProductService) DeleteMappedProductsBatch(storeID int64, skus []string) ([]string, []string, error) {
 	deletedSKUs, failedSKUs, err := ps.ProductRepo.DeleteMappedProductsBySKUs(storeID, skus)
 	if err != nil {
 		return nil, nil, err
