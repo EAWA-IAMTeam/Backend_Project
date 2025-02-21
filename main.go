@@ -54,7 +54,7 @@ func main() {
 
 	// Start server
 	port := "7000"
-	address := "192.168.0.73:" + port
+	address := "192.168.0.189:" + port
 	fmt.Println("Server running on", address)
 	e.Logger.Fatal(e.Start(address))
 }
