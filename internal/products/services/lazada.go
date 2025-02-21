@@ -36,6 +36,7 @@ func (ps *ProductService) FetchLazadaMappedProducts(storeID int64) ([]models.Pro
 	}
 
 	resp, err := lazadaClient.Execute("/products/get", "GET", nil)
+	log.Print(resp)
 	if err != nil {
 		log.Printf("Failed to fetch products from API: %v", err)
 		return nil, fmt.Errorf("failed to fetch products")

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 
 	"github.com/lib/pq"
 
@@ -20,15 +21,25 @@ func NewProductRepository(db *sql.DB) *ProductRepository {
 }
 
 // GetStockItemsByCompany fetches stock items by company ID
-func (pr *ProductRepository) GetStockItemsByCompany(companyID int64) ([]*models.StockItem, error) {
-	query := `
-        SELECT id, company_id, stock_code, stock_control, ref_price, ref_cost, weight, 
-               height, width, length, variation1, variation2, quantity, reserved_quantity,
-               platform, description, status 
-        FROM stockitem 
-        WHERE company_id = $1`
+func (pr *ProductRepository) GetStockItemsByCompany(companyID int64, page, limit int) ([]*models.StockItem, error) {
+	//Calculate offset
+	offset := (page - 1) * limit
 
-	rows, err := pr.DB.Query(query, companyID)
+	query := `
+	SELECT id, company_id, stock_code, stock_control, ref_price, ref_cost, weight, 
+		   height, width, length, variation1, variation2, quantity, reserved_quantity,
+		   platform, description, status 
+	FROM stockitem 
+	WHERE company_id = $1
+	LIMIT $2 OFFSET $3`
+	// query := `
+	//     SELECT id, company_id, stock_code, stock_control, ref_price, ref_cost, weight,
+	//            height, width, length, variation1, variation2, quantity, reserved_quantity,
+	//            platform, description, status
+	//     FROM stockitem
+	//     WHERE company_id = $1`
+
+	rows, err := pr.DB.Query(query, companyID, limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -135,7 +146,7 @@ func (pr *ProductRepository) InsertStockItemsByCompany(companyID int64, stockIte
 }
 
 // GetProductsByCompany fetches products by company ID
-func (pr *ProductRepository) GetProductsByCompany(companyID int64) ([]*models.MergeProduct, error) {
+func (pr *ProductRepository) GetProductsByCompany(companyID int64, page, limit int) ([]*models.MergeProduct, error) {
 	// Step 1: Fetch all store IDs for the given company
 	storeQuery := `SELECT id FROM store WHERE company_id = $1`
 	storeRows, err := pr.DB.Query(storeQuery, companyID)
@@ -158,15 +169,25 @@ func (pr *ProductRepository) GetProductsByCompany(companyID int64) ([]*models.Me
 		return []*models.MergeProduct{}, nil
 	}
 
+	//Calculate offset
+	offset := (page - 1) * limit
+
 	// Step 2: Fetch all store products based on store IDs
+	// query := `
+	//     SELECT si.id, si.ref_price, si.ref_cost, si.quantity,
+	//            sp.id, sp.price, sp.discounted_price, sp.sku, sp.currency, sp.status, sp.store_id, sp.media_url
+	//     FROM storeproduct sp
+	//     JOIN stockitem si ON sp.stock_item_id = si.id
+	//     WHERE sp.store_id = ANY($1)`
 	query := `
         SELECT si.id, si.ref_price, si.ref_cost, si.quantity,
                sp.id, sp.price, sp.discounted_price, sp.sku, sp.currency, sp.status, sp.store_id, sp.media_url
         FROM storeproduct sp
         JOIN stockitem si ON sp.stock_item_id = si.id
-        WHERE sp.store_id = ANY($1)`
+        WHERE sp.store_id = ANY($1)
+		LIMIT $2 OFFSET $3`
 
-	rows, err := pr.DB.Query(query, pq.Array(storeIDs)) // Using pq.Array for PostgreSQL IN clause
+	rows, err := pr.DB.Query(query, pq.Array(storeIDs), limit, offset) // Using pq.Array for PostgreSQL IN clause
 	if err != nil {
 		return nil, err
 	}
@@ -295,6 +316,7 @@ func (r *ProductRepository) GetStoreByCompany(companyID int64) (map[string][]int
 		return nil, fmt.Errorf("failed to query database: %w", err)
 	}
 	defer rows.Close()
+	log.Print("CompanyID:", companyID)
 
 	// Map to store platform-wise store IDs
 	storeMap := make(map[string][]int64)

@@ -21,8 +21,12 @@ func NewRequestHandler(nc *nats.Conn, js nats.JetStreamContext) *RequestHandler 
 	// Ensure the ORDERS stream exists
 	_, err := js.AddStream(&nats.StreamConfig{
 		Name:     "order",
-		Subjects: []string{"order.request", "order.response.*"},
-		Storage:  nats.FileStorage, // Persistent storage
+		Subjects: []string{"order.request.*", "order.response.*"},
+		// MaxBytes:          370000000000,
+		// MaxMsgSize:        370000000,
+		// MaxMsgsPerSubject: 37000000,
+		// MaxMsgs:           370000,
+		Storage: nats.FileStorage, // Persistent storage
 	})
 	if err != nil && err != nats.ErrStreamNameAlreadyInUse {
 		log.Fatalf("Failed to create JetStream stream: %v", err)
@@ -46,6 +50,7 @@ func NewRequestHandler(nc *nats.Conn, js nats.JetStreamContext) *RequestHandler 
 func (h *RequestHandler) HandleGetRequest(c echo.Context) error {
 	companyID, _ := strconv.Atoi(c.Param("company_id"))
 	topic := c.Param("topic")
+	method := c.Param("method")
 
 	page, _ := strconv.Atoi(c.QueryParam("page"))
 	limit, _ := strconv.Atoi(c.QueryParam("limit"))
@@ -73,7 +78,7 @@ func (h *RequestHandler) HandleGetRequest(c echo.Context) error {
 	data, _ := json.Marshal(request)
 
 	//Subscribe to Jetstream to fetch messages
-	_, err := h.js.Publish(topic+".request", data)
+	_, err := h.js.Publish(topic+".request."+method, data)
 	if err != nil {
 		log.Printf("Failed to publish request: %v", err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to publish request"})
@@ -131,3 +136,68 @@ func (h *RequestHandler) HandleGetRequest(c echo.Context) error {
 
 // 	return c.JSON(http.StatusOK, response)
 // }
+
+func (h *RequestHandler) HandlePostRequest(c echo.Context) error {
+	companyID, _ := strconv.Atoi(c.Param("company_id"))
+	topic := c.Param("topic")
+	method := c.Param("method")
+
+	//Read request body
+	var payload map[string]interface{}
+	if err := c.Bind(&payload); err != nil {
+		log.Println(payload)
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid JSON payload"})
+
+	}
+
+	//Generate a unique request ID
+	requestID := "req-" + strconv.FormatInt(time.Now().UnixNano(), 10)
+
+	// Attach metadata to the request
+	payload["company_id"] = companyID
+	payload["request_id"] = requestID
+	data, _ := json.Marshal(payload)
+
+	//Publish request to Jetstream
+	_, err := h.js.Publish(topic+".request."+method, data)
+	if err != nil {
+		log.Printf("Failed to publish request: %v", err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to publish request"})
+	}
+
+	//Subscribe for response
+	responseSubject := topic + ".response.*"
+	sub, err := h.js.PullSubscribe(responseSubject, topic+"-replies")
+	if err != nil {
+		log.Printf("Failed to subscribe for response : %v", err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to subscribe for response"})
+	}
+
+	timeout := time.After(15 * time.Second)
+	for {
+		select {
+		case <-timeout:
+			return c.JSON(http.StatusGatewayTimeout, map[string]string{"error": "Timeout waiting for response"})
+
+		default:
+			msgs, err := sub.Fetch(1)
+			if err != nil || len(msgs) == 0 {
+				continue
+			}
+
+			//Parse and return response
+			var response json.RawMessage
+			if err := json.Unmarshal(msgs[0].Data, &response); err != nil {
+				log.Printf("Error parsing response: %v", err)
+				return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Invalid response format"})
+			}
+
+			//Acknowledge message processing
+			msgs[0].Ack()
+
+			return c.JSON(http.StatusOK, response)
+		}
+
+	}
+
+}

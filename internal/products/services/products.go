@@ -3,12 +3,11 @@ package services
 import (
 	"backend_project/internal/products/models"
 	"backend_project/internal/products/repositories"
-	"bytes"
+
 	"encoding/json"
-	"io"
 	"log"
 
-	"github.com/labstack/echo/v4"
+	"github.com/nats-io/nats.go"
 )
 
 type ProductService struct {
@@ -20,8 +19,8 @@ func NewProductService(pr *repositories.ProductRepository) *ProductService {
 }
 
 // FetchStockItemsByCompany retrieves stock items by company ID
-func (ps *ProductService) FetchStockItemsByCompany(companyID int64) ([]*models.StockItem, error) {
-	return ps.ProductRepo.GetStockItemsByCompany(companyID)
+func (ps *ProductService) FetchStockItemsByCompany(companyID int64, page, limit int) ([]*models.StockItem, error) {
+	return ps.ProductRepo.GetStockItemsByCompany(companyID, page, limit)
 }
 
 // CreateStockItemsByCompany inserts stock items for a specific company
@@ -30,22 +29,23 @@ func (ps *ProductService) CreateStockItemsByCompany(companyID int64, stockItems 
 }
 
 // FetchProductsByStore retrieves products by store ID
-func (ps *ProductService) FetchProductsByCompany(companyID int64) ([]*models.MergeProduct, error) {
-	return ps.ProductRepo.GetProductsByCompany(companyID)
+func (ps *ProductService) FetchProductsByCompany(companyID int64, page, limit int) ([]*models.MergeProduct, error) {
+	return ps.ProductRepo.GetProductsByCompany(companyID, page, limit)
 }
 
 // ParseProductRequest reads and parses the request body
-func (ps *ProductService) ParseProductRequest(c echo.Context) ([]*models.StoreProduct, error) {
-	body, err := io.ReadAll(c.Request().Body)
-	if err != nil {
-		log.Printf("Failed to read request body: %v", err)
-		return nil, err
-	}
+func (ps *ProductService) ParseProductRequest(msg *nats.Msg) ([]*models.StoreProduct, error) {
+	// body, err := io.ReadAll(c.Request().Body)
+	// if err != nil {
+	// 	log.Printf("Failed to read request body: %v", err)
+	// 	return nil, err
+	// }
 
-	c.Request().Body = io.NopCloser(bytes.NewBuffer(body))
+	// c.Request().Body = io.NopCloser(bytes.NewBuffer(body))
 
 	var req []*models.StoreProduct
-	if err := json.Unmarshal(body, &req); err != nil {
+
+	if err := json.Unmarshal(msg.Data, &req); err != nil {
 		return nil, err
 	}
 
@@ -108,8 +108,10 @@ func (ps *ProductService) FetchUnmappedProducts(companyID int64) ([]models.Produ
 
 	storeIDs, err := ps.ProductRepo.GetStoreByCompany(companyID)
 	if err != nil {
+		log.Print("a")
 		return nil, err
 	}
+	log.Print("Store:", storeIDs)
 
 	// TODO: Fetch the products from all platforms according to the company's store by using the access token in database
 	for _, storeID := range storeIDs["Lazada"] {

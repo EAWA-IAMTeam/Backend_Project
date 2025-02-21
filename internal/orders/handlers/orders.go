@@ -23,7 +23,7 @@ func NewOrderHandler(repo *repositories.OrderRepository, js nats.JetStreamContex
 // SetupSubscriptions initializes all NATS subscriptions
 func (h *OrderHandler) SetupSubscriptions() error {
 	// Subscribe to get orders by company
-	if _, err := h.js.QueueSubscribe("order.request", "order-workers", h.handleGetOrdersByCompany); err != nil {
+	if _, err := h.js.QueueSubscribe("order.request.getbycompany", "order-company", h.handleGetOrdersByCompany); err != nil {
 		return err
 	}
 
@@ -60,7 +60,7 @@ func (oh *OrderHandler) handleGetOrdersByCompany(msg *nats.Msg) {
 		return
 	}
 
-	//Publish response to JetStream (`Orders.response.<requestID>`)
+	//Publish response to JetStream (`order.response.<requestID>`)
 	responseSubject := "order.response." + request.RequestID
 	if _, err := oh.js.Publish(responseSubject, response); err != nil {
 		log.Printf("Error sending response: %v", err)

@@ -3,106 +3,205 @@ package handlers
 import (
 	"backend_project/internal/products/models"
 	"backend_project/internal/products/services"
-	"fmt"
+	"encoding/json"
 	"log"
 	"net/http"
-	"strconv"
 
 	"github.com/labstack/echo/v4"
+	"github.com/nats-io/nats.go"
 )
 
 type ProductHandler struct {
-	ProductService *services.ProductService
+	ps *services.ProductService
+	js nats.JetStreamContext
 }
 
-func NewProductHandler(ps *services.ProductService) *ProductHandler {
-	return &ProductHandler{ProductService: ps}
+func NewProductHandler(ps *services.ProductService, js nats.JetStreamContext) *ProductHandler {
+	return &ProductHandler{
+		ps: ps,
+		js: js,
+	}
+}
+
+// SetupSubscriptions initializes all NATS subscriptions
+func (ph *ProductHandler) SetupSubscriptions() error {
+	// Subscribe to get product by company
+	if _, err := ph.js.QueueSubscribe("product.request.getsqlitembycompany", "product-sql-company", ph.GetSQLItemsByCompany); err != nil {
+		return err
+	}
+
+	if _, err := ph.js.QueueSubscribe("product.request.postsqlitem", "product-sql-post", ph.PostSQLItemsByCompany); err != nil {
+		return err
+	}
+
+	if _, err := ph.js.QueueSubscribe("product.request.getproductbycompany", "product-company", ph.GetProductsByCompany); err != nil {
+		return err
+	}
+
+	if _, err := ph.js.QueueSubscribe("product.request.insertproducts", "product-insert", ph.InsertProducts); err != nil {
+		return err
+	}
+
+	if _, err := ph.js.QueueSubscribe("product.request.getmappedproducts", "product-platform-mapped", ph.GetMappedProducts); err != nil {
+		return err
+	}
+
+	if _, err := ph.js.QueueSubscribe("product.request.getunmappedproducts", "product-platform-unmapped", ph.GetUnmappedProducts); err != nil {
+		return err
+	}
+
+	log.Println("Product subscriptions setup complete")
+	return nil
 }
 
 // GetStockItemsByCompany handles fetching stock items by company ID
-func (ph *ProductHandler) GetStockItemsByCompany(c echo.Context) error {
-	var companyID int64
-	var err error
+func (ph *ProductHandler) GetSQLItemsByCompany(msg *nats.Msg) {
+	var request models.PaginatedRequest
 
-	companyID, err = strconv.ParseInt(c.Param("company_id"), 10, 64)
-	if err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{"message": "Invalid company_id"})
+	if err := json.Unmarshal(msg.Data, &request); err != nil {
+		log.Println("Failed to unmarshal request:", err)
+		ph.respondWithError("Invalid request format", request.RequestID)
+		return
 	}
 
-	stockItems, err := ph.ProductService.FetchStockItemsByCompany(companyID)
+	//Get stock Items from services
+	sqlItems, err := ph.ps.FetchStockItemsByCompany(
+		request.CompanyID,
+		request.Pagination.Page,
+		request.Pagination.Limit,
+	)
 	if err != nil {
-		log.Printf("Failed to fetch stock items: %v", err)
-		return c.JSON(http.StatusInternalServerError, map[string]string{"message": "Failed to fetch stock items"})
+		log.Printf("Error fetching sql items: %v", err)
+		ph.respondWithError("Failed to fetch sql items", request.RequestID)
+		return
 	}
 
-	return c.JSON(http.StatusOK, stockItems)
+	// Send response using Jetstream
+	response, err := json.Marshal(sqlItems)
+	if err != nil {
+		ph.respondWithError("Internal server error", request.RequestID)
+		return
+	}
+
+	//Publish response to JetStream (`product.response.<requestID>`)
+	responseSubject := "product.response." + request.RequestID
+	if _, err := ph.js.Publish(responseSubject, response); err != nil {
+		log.Printf("Error sending response: %v", err)
+	}
+
+	// Explicitly acknowledge message
+	msg.Ack()
 }
 
 // PostStockItemsByCompany handles inserting stock items for a specific company
-func (ph *ProductHandler) PostStockItemsByCompany(c echo.Context) error {
-	var companyID int64
-	var err error
-
-	companyID, err = strconv.ParseInt(c.Param("company_id"), 10, 64)
-	if err != nil {
-		fmt.Println("Error parsing company_id:", err)
-		return c.JSON(http.StatusBadRequest, map[string]string{"message": "Invalid company_id"})
-	}
-
+func (ph *ProductHandler) PostSQLItemsByCompany(msg *nats.Msg) {
+	//Parse request payload
 	var request struct {
+		CompanyID  int64              `json:"company_id"`
+		RequestID  string             `json:"request_id"`
 		StockItems []models.StockItem `json:"stock_items"`
 	}
 
-	if err := c.Bind(&request); err != nil {
-		fmt.Println("Error binding request body:", err)
-		return c.JSON(http.StatusBadRequest, map[string]string{"message": "Invalid request body"})
+	if err := json.Unmarshal(msg.Data, &request); err != nil {
+		log.Println("Failed to unmarshal request:", err)
+		ph.respondWithError("Invalid request format", request.RequestID)
+		msg.Ack()
+		return
 	}
 
+	// Validate sql items
 	if len(request.StockItems) == 0 {
-		fmt.Println("Error: Stock items list is empty")
-		return c.JSON(http.StatusBadRequest, map[string]string{"message": "Stock items cannot be empty"})
+		log.Println("Error: Stock items list is empty")
+		ph.respondWithError("Stock items cannot be empty", request.RequestID)
+		msg.Ack()
+		return
 	}
 
-	err = ph.ProductService.CreateStockItemsByCompany(companyID, request.StockItems)
+	err := ph.ps.CreateStockItemsByCompany(request.CompanyID, request.StockItems)
 	if err != nil {
-		fmt.Println("Error in CreateStockItemsByCompany:", err)
-		return c.JSON(http.StatusInternalServerError, map[string]string{"message": "Failed to post stock items"})
+		log.Printf("Error inserting stock items: %v", err)
+		ph.respondWithError("Failed to create stock items", request.RequestID)
+		msg.Ack()
+		return
 	}
 
-	return c.JSON(http.StatusOK, map[string]string{"message": "Stock items successfully posted"})
+	//Prepare success response
+	response := map[string]interface{}{
+		"message":    "Sql Items successfully inserted",
+		"company_id": request.CompanyID,
+		"request_id": request.RequestID,
+	}
+
+	// Send response back to JetStream (`product.response.{request_id}`)
+	responseData, _ := json.Marshal(response)
+	responseSubject := "product.response." + request.RequestID
+	if _, err := ph.js.Publish(responseSubject, responseData); err != nil {
+		log.Printf("Failed to publish response: %v", err)
+	}
+
+	msg.Ack()
+	log.Printf("Successfully processed stock items for company %d", request.CompanyID)
 }
 
 // GetProductsByStore handles fetching products by store ID
-func (ph *ProductHandler) GetProductsByCompany(c echo.Context) error {
-	var companyID int64
-	var err error
+func (ph *ProductHandler) GetProductsByCompany(msg *nats.Msg) {
+	var request models.PaginatedRequest
 
-	companyID, err = strconv.ParseInt(c.Param("company_id"), 10, 64)
-	if err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{"message": "Invalid company_id"})
+	if err := json.Unmarshal(msg.Data, &request); err != nil {
+		log.Println("Failed to unmarshal request:", err)
+		ph.respondWithError("Invalid request format", request.RequestID)
+		return
 	}
 
-	products, err := ph.ProductService.FetchProductsByCompany(companyID)
+	products, err := ph.ps.FetchProductsByCompany(
+		request.CompanyID,
+		request.Pagination.Page,
+		request.Pagination.Limit,
+	)
+
 	if err != nil {
-		log.Printf("Failed to fetch products: %v", err)
-		return c.JSON(http.StatusInternalServerError, map[string]string{"message": "Failed to fetch products"})
+		log.Printf("Error fetching sql items: %v", err)
+		ph.respondWithError("Failed to fetch sql items", request.RequestID)
+		return
 	}
 
-	return c.JSON(http.StatusOK, products)
+	// Send response using Jetstream
+	response, err := json.Marshal(products)
+	if err != nil {
+		ph.respondWithError("Internal server error", request.RequestID)
+		return
+	}
+
+	//Publish response to JetStream (`product.response.<requestID>`)
+	responseSubject := "product.response." + request.RequestID
+	if _, err := ph.js.Publish(responseSubject, response); err != nil {
+		log.Printf("Error sending response: %v", err)
+	}
+
+	// Explicitly acknowledge message
+	msg.Ack()
 }
 
 // InsertProducts handles inserting products into the database
-func (ph *ProductHandler) InsertProducts(c echo.Context) error {
-	req, err := ph.ProductService.ParseProductRequest(c)
-	if err != nil {
-		log.Printf("Invalid request format: %v", err)
-		return c.JSON(http.StatusBadRequest, map[string]string{"message": "Invalid request format"})
+func (ph *ProductHandler) InsertProducts(msg *nats.Msg) {
+	var request struct {
+		RequestID string `json:"request_id"`
 	}
 
-	result, err := ph.ProductService.InsertProducts(req)
+	req, err := ph.ps.ParseProductRequest(msg)
+	if err != nil {
+		log.Printf("Invalid request format: %v", err)
+		ph.respondWithError("Invalid request format", request.RequestID)
+		msg.Ack()
+		return
+	}
+
+	result, err := ph.ps.InsertProducts(req)
 	if err != nil {
 		log.Printf("Error inserting products: %v", err)
-		return c.JSON(http.StatusInternalServerError, map[string]string{"message": "Failed to insert products"})
+		ph.respondWithError("Error inserting products", request.RequestID)
+		msg.Ack()
+		return
 	}
 
 	statusCode := http.StatusCreated
@@ -110,46 +209,93 @@ func (ph *ProductHandler) InsertProducts(c echo.Context) error {
 		statusCode = http.StatusConflict
 	}
 
-	return c.JSON(statusCode, result)
+	//Prepare success response
+	response := map[string]interface{}{
+		"message":     "Products successfully inserted",
+		"request_id":  request.RequestID,
+		"status_code": statusCode,
+	}
+
+	// Send response back to JetStream (`product.response.{request_id}`)
+	responseData, _ := json.Marshal(response)
+	responseSubject := "product.response." + request.RequestID
+	if _, err := ph.js.Publish(responseSubject, responseData); err != nil {
+		log.Printf("Failed to publish response: %v", err)
+	}
+
+	msg.Ack()
+	log.Printf("Successfully insert products")
 }
 
 // GetMappedProducts handles API requests for mapped products
-func (ph *ProductHandler) GetMappedProducts(c echo.Context) error {
-	var companyID int64
-	var err error
+func (ph *ProductHandler) GetMappedProducts(msg *nats.Msg) {
+	var request models.PaginatedRequest
 
-	companyID, err = strconv.ParseInt(c.Param("company_id"), 10, 64)
-	if err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{"message": "Invalid company_id"})
+	if err := json.Unmarshal(msg.Data, &request); err != nil {
+		log.Println("Failed to unmarshal request:", err)
+		ph.respondWithError("Invalid request format", request.RequestID)
+		return
 	}
 
-	products, err := ph.ProductService.FetchMappedProducts(companyID)
+	products, err := ph.ps.FetchMappedProducts(
+		request.CompanyID,
+	)
 	if err != nil {
 		log.Printf("Error fetching mapped products: %v", err)
-		return c.JSON(http.StatusInternalServerError, map[string]string{"message": "Failed to fetch mapped products"})
+		ph.respondWithError("Failed to fetch mapped products", request.RequestID)
+		return
 	}
 
-	return c.JSON(http.StatusOK, products)
+	// Send response using Jetstream
+	response, err := json.Marshal(products)
+	if err != nil {
+		ph.respondWithError("Internal server error", request.RequestID)
+		return
+	}
+
+	//Publish response to JetStream (`product.response.<requestID>`)
+	responseSubject := "product.response." + request.RequestID
+	if _, err := ph.js.Publish(responseSubject, response); err != nil {
+		log.Printf("Error sending response: %v", err)
+	}
+
+	// Explicitly acknowledge message
+	msg.Ack()
 }
 
 // GetUnmappedProducts handles API requests for mapped products
 // TODO: Fetch the products from all platforms according to the company's store by using the access token in database
-func (ph *ProductHandler) GetUnmappedProducts(c echo.Context) error {
-	var companyID int64
-	var err error
+func (ph *ProductHandler) GetUnmappedProducts(msg *nats.Msg) {
+	var request models.PaginatedRequest
 
-	companyID, err = strconv.ParseInt(c.Param("company_id"), 10, 64)
-	if err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{"message": "Invalid company_id"})
+	if err := json.Unmarshal(msg.Data, &request); err != nil {
+		log.Println("Failed to unmarshal request:", err)
+		ph.respondWithError("Invalid request format", request.RequestID)
+		return
 	}
 
-	products, err := ph.ProductService.FetchUnmappedProducts(companyID)
+	products, err := ph.ps.FetchUnmappedProducts(request.CompanyID)
 	if err != nil {
-		log.Printf("Error fetching mapped products: %v", err)
-		return c.JSON(http.StatusInternalServerError, map[string]string{"message": "Failed to fetch mapped products"})
+		log.Printf("Error fetching unmapped products: %v", err)
+		ph.respondWithError("Failed to fetch unmapped products", request.RequestID)
+		return
 	}
 
-	return c.JSON(http.StatusOK, products)
+	// Send response using Jetstream
+	response, err := json.Marshal(products)
+	if err != nil {
+		ph.respondWithError("Internal server error", request.RequestID)
+		return
+	}
+
+	//Publish response to JetStream (`product.response.<requestID>`)
+	responseSubject := "product.response." + request.RequestID
+	if _, err := ph.js.Publish(responseSubject, response); err != nil {
+		log.Printf("Error sending response: %v", err)
+	}
+
+	// Explicitly acknowledge message
+	msg.Ack()
 }
 
 // RemoveMappedProducts handles API requests to delete mapped products
@@ -164,7 +310,7 @@ func (ph *ProductHandler) RemoveMappedProducts(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"message": "Invalid request body"})
 	}
 
-	rowsAffected, err := ph.ProductService.DeleteMappedProducts(request.StoreID, request.SKU)
+	rowsAffected, err := ph.ps.DeleteMappedProducts(request.StoreID, request.SKU)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"message": "Failed to remove mapped product"})
 	}
@@ -193,7 +339,7 @@ func (ph *ProductHandler) RemoveMappedProductsBatch(c echo.Context) error {
 	}
 
 	// Use request.StoreID instead of undefined storeID
-	deletedSKUs, failedSKUs, err := ph.ProductService.DeleteMappedProductsBatch(request.StoreID, request.SKUs)
+	deletedSKUs, failedSKUs, err := ph.ps.DeleteMappedProductsBatch(request.StoreID, request.SKUs)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"message": "Failed to remove mapped products"})
 	}
@@ -205,4 +351,12 @@ func (ph *ProductHandler) RemoveMappedProductsBatch(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, response)
+}
+
+func (ph *ProductHandler) respondWithError(errMsg string, requestID string) {
+	response := map[string]string{"error": errMsg}
+	data, _ := json.Marshal(response)
+
+	responseSubject := "product.response." + requestID
+	ph.js.Publish(responseSubject, data)
 }
