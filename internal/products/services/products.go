@@ -3,7 +3,6 @@ package services
 import (
 	"backend_project/internal/products/models"
 	"backend_project/internal/products/repositories"
-
 	"encoding/json"
 	"log"
 
@@ -34,18 +33,16 @@ func (ps *ProductService) FetchProductsByCompany(companyID int64, page, limit in
 }
 
 // ParseProductRequest reads and parses the request body
-func (ps *ProductService) ParseProductRequest(msg *nats.Msg) ([]*models.StoreProduct, error) {
-	// body, err := io.ReadAll(c.Request().Body)
-	// if err != nil {
-	// 	log.Printf("Failed to read request body: %v", err)
-	// 	return nil, err
-	// }
+func (ps *ProductService) ParseProductRequest(msg *nats.Msg) ([]*models.Request, error) {
+	body := msg.Data
 
-	// c.Request().Body = io.NopCloser(bytes.NewBuffer(body))
+	// Log the received data for debugging (optional)
+	log.Printf("Received NATS message: %s", string(body))
 
-	var req []*models.StoreProduct
-
-	if err := json.Unmarshal(msg.Data, &req); err != nil {
+	// Parse the JSON payload
+	var req []*models.Request
+	if err := json.Unmarshal(body, &req); err != nil {
+		log.Printf("Failed to parse JSON: %v", err)
 		return nil, err
 	}
 
@@ -53,7 +50,7 @@ func (ps *ProductService) ParseProductRequest(msg *nats.Msg) ([]*models.StorePro
 }
 
 // InsertProducts inserts products into the database
-func (ps *ProductService) InsertProducts(req []*models.StoreProduct) (*models.InsertResult, error) {
+func (ps *ProductService) InsertProducts(req []*models.Request) (*models.InsertResult, error) {
 	return ps.ProductRepo.InsertProductBatch(req)
 }
 

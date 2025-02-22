@@ -237,7 +237,7 @@ func (pr *ProductRepository) GetProductsByCompany(companyID int64, page, limit i
 }
 
 // InsertProductBatch inserts multiple products into the database
-func (pr *ProductRepository) InsertProductBatch(products []*models.StoreProduct) (*models.InsertResult, error) {
+func (pr *ProductRepository) InsertProductBatch(products []*models.Request) (*models.InsertResult, error) {
 	result := &models.InsertResult{
 		Inserted:   0,
 		Duplicates: make([]string, 0),

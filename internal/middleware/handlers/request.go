@@ -137,16 +137,15 @@ func (h *RequestHandler) HandleGetRequest(c echo.Context) error {
 // 	return c.JSON(http.StatusOK, response)
 // }
 
-func (h *RequestHandler) HandlePostRequest(c echo.Context) error {
+func (h *RequestHandler) PostSQLItems(c echo.Context) error {
 	companyID, _ := strconv.Atoi(c.Param("company_id"))
 	topic := c.Param("topic")
-	method := c.Param("method")
 
 	//Read request body
 	var payload map[string]interface{}
 	if err := c.Bind(&payload); err != nil {
 		log.Println(payload)
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid JSON payload"})
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid response payload"})
 
 	}
 
@@ -159,7 +158,7 @@ func (h *RequestHandler) HandlePostRequest(c echo.Context) error {
 	data, _ := json.Marshal(payload)
 
 	//Publish request to Jetstream
-	_, err := h.js.Publish(topic+".request."+method, data)
+	_, err := h.js.Publish(topic+".request.postsqlitem", data)
 	if err != nil {
 		log.Printf("Failed to publish request: %v", err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to publish request"})
@@ -173,11 +172,78 @@ func (h *RequestHandler) HandlePostRequest(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to subscribe for response"})
 	}
 
-	timeout := time.After(15 * time.Second)
+	timeout := time.After(5 * time.Second)
 	for {
 		select {
 		case <-timeout:
 			return c.JSON(http.StatusGatewayTimeout, map[string]string{"error": "Timeout waiting for response"})
+
+		default:
+			msgs, err := sub.Fetch(1)
+			if err != nil || len(msgs) == 0 {
+				continue
+			}
+
+			//Parse and return response
+			var response json.RawMessage
+			if err := json.Unmarshal(msgs[0].Data, &response); err != nil {
+				log.Printf("Error parsing response: %v", err)
+				return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Invalid response format"})
+			}
+
+			//Acknowledge message processing
+			msgs[0].Ack()
+
+			return c.JSON(http.StatusOK, response)
+		}
+
+	}
+
+}
+
+func (h *RequestHandler) PostProducts(c echo.Context) error {
+	companyID, _ := strconv.Atoi(c.Param("company_id"))
+	topic := c.Param("topic")
+
+	//Read request body
+	var payload []map[string]interface{}
+	if err := c.Bind(&payload); err != nil {
+		log.Println(payload)
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid response payload"})
+
+	}
+
+	//Generate a unique request ID
+	requestID := "req-" + strconv.FormatInt(time.Now().UnixNano(), 10)
+
+	// Attach metadata to each item in the payload
+	for i := range payload {
+		payload[i]["company_id"] = companyID
+		payload[i]["request_id"] = requestID
+	}
+
+	data, _ := json.Marshal(payload)
+
+	//Publish request to Jetstream
+	_, err := h.js.Publish(topic+".request.insertproducts", data)
+	if err != nil {
+		log.Printf("Failed to publish request: %v", err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to publish request"})
+	}
+
+	//Subscribe for response
+	responseSubject := topic + ".response.*"
+	sub, err := h.js.PullSubscribe(responseSubject, topic+"-replies")
+	if err != nil {
+		log.Printf("Failed to subscribe for response : %v", err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to subscribe for response"})
+	}
+
+	timeout := time.After(5 * time.Second)
+	for {
+		select {
+		case <-timeout:
+			return c.JSON(http.StatusGatewayTimeout, map[string]string{"error": "aTimeout waiting for response"})
 
 		default:
 			msgs, err := sub.Fetch(1)

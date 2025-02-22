@@ -26,7 +26,8 @@ func main() {
 	// e.POST("/api/orders", requestHandler.HandlePostRequest)
 	// /company/:company_id/employee/:employeeID
 	e.GET("company/:company_id/topic/:topic/method/:method", requestHandler.HandleGetRequest)
-	e.POST("company/:company_id/topic/:topic/method/:method", requestHandler.HandlePostRequest)
+	e.POST("company/:company_id/topic/:topic/method/postsqlitem", requestHandler.PostSQLItems)
+	e.POST("company/:company_id/topic/:topic/method/insertproducts", requestHandler.PostProducts)
 
 	log.Println("🚀 API Gateway running on :8081")
 	e.Logger.Fatal(e.Start(":8081"))

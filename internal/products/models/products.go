@@ -22,7 +22,7 @@ type StockItem struct {
 
 type StoreProduct struct {
 	ID              int64    `json:"id"`
-	StoreID         string   `json:"store_id"`
+	StoreID         int8     `json:"store_id"`
 	StockItemID     int64    `json:"stock_item_id"`
 	Price           float64  `json:"price"`
 	DiscountedPrice float64  `json:"discounted_price"`
@@ -43,4 +43,18 @@ type MergeProduct struct {
 type InsertResult struct {
 	Inserted   int      `json:"inserted"`
 	Duplicates []string `json:"duplicates"`
+}
+
+type Request struct {
+	ID              int64    `json:"id"`
+	CompanyID       int64    `json:"company_id"`
+	StoreID         int8     `json:"store_id"`
+	StockItemID     int64    `json:"stock_item_id"`
+	Price           float64  `json:"price"`
+	DiscountedPrice float64  `json:"discounted_price"`
+	SKU             string   `json:"sku"`
+	Currency        string   `json:"currency"`
+	Status          string   `json:"status"`
+	ImageURL        []string `json:"image_url"`
+	RequestID       string   `json:"request_id"`
 }

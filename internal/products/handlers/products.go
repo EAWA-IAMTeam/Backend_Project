@@ -34,19 +34,19 @@ func (ph *ProductHandler) SetupSubscriptions() error {
 		return err
 	}
 
-	if _, err := ph.js.QueueSubscribe("product.request.getproductbycompany", "product-company", ph.GetProductsByCompany); err != nil {
+	if _, err := ph.js.QueueSubscribe("product.request.getproductbycompany", "product-product-company", ph.GetProductsByCompany); err != nil {
 		return err
 	}
 
-	if _, err := ph.js.QueueSubscribe("product.request.insertproducts", "product-insert", ph.InsertProducts); err != nil {
+	if _, err := ph.js.QueueSubscribe("product.request.insertproducts", "product-insert-products", ph.InsertProducts); err != nil {
 		return err
 	}
 
-	if _, err := ph.js.QueueSubscribe("product.request.getmappedproducts", "product-platform-mapped", ph.GetMappedProducts); err != nil {
+	if _, err := ph.js.QueueSubscribe("product.request.getmappedproducts", "product-product-mapped", ph.GetMappedProducts); err != nil {
 		return err
 	}
 
-	if _, err := ph.js.QueueSubscribe("product.request.getunmappedproducts", "product-platform-unmapped", ph.GetUnmappedProducts); err != nil {
+	if _, err := ph.js.QueueSubscribe("product.request.getunmappedproducts", "product-product-unmapped", ph.GetUnmappedProducts); err != nil {
 		return err
 	}
 
@@ -127,7 +127,7 @@ func (ph *ProductHandler) PostSQLItemsByCompany(msg *nats.Msg) {
 
 	//Prepare success response
 	response := map[string]interface{}{
-		"message":    "Sql Items successfully inserted",
+		"message":    "Stock items successfully created",
 		"company_id": request.CompanyID,
 		"request_id": request.RequestID,
 	}
@@ -184,23 +184,23 @@ func (ph *ProductHandler) GetProductsByCompany(msg *nats.Msg) {
 
 // InsertProducts handles inserting products into the database
 func (ph *ProductHandler) InsertProducts(msg *nats.Msg) {
-	var request struct {
-		RequestID string `json:"request_id"`
+	req, err := ph.ps.ParseProductRequest(msg)
+	// Extract request_id from the first product in the slice (if available)
+	var requestID string
+	if len(req) > 0 {
+		requestID = req[0].RequestID // Ensure StoreProduct has a RequestID field
 	}
 
-	req, err := ph.ps.ParseProductRequest(msg)
 	if err != nil {
-		log.Printf("Invalid request format: %v", err)
-		ph.respondWithError("Invalid request format", request.RequestID)
-		msg.Ack()
+		log.Println("Failed to unmarshal request:", err)
+		ph.respondWithError("Invalid request format", requestID)
 		return
 	}
 
 	result, err := ph.ps.InsertProducts(req)
 	if err != nil {
-		log.Printf("Error inserting products: %v", err)
-		ph.respondWithError("Error inserting products", request.RequestID)
-		msg.Ack()
+		log.Println("Failed to unmarshal request:", err)
+		ph.respondWithError("Invalid request format", requestID)
 		return
 	}
 
@@ -209,22 +209,22 @@ func (ph *ProductHandler) InsertProducts(msg *nats.Msg) {
 		statusCode = http.StatusConflict
 	}
 
-	//Prepare success response
+	// Construct response
 	response := map[string]interface{}{
-		"message":     "Products successfully inserted",
-		"request_id":  request.RequestID,
-		"status_code": statusCode,
+		"request_id": requestID,
+		"status":     statusCode,
+		"message":    "Products inserted successfully",
+		"data":       result,
 	}
-
 	// Send response back to JetStream (`product.response.{request_id}`)
 	responseData, _ := json.Marshal(response)
-	responseSubject := "product.response." + request.RequestID
+	responseSubject := "product.response." + requestID
 	if _, err := ph.js.Publish(responseSubject, responseData); err != nil {
 		log.Printf("Failed to publish response: %v", err)
 	}
 
 	msg.Ack()
-	log.Printf("Successfully insert products")
+
 }
 
 // GetMappedProducts handles API requests for mapped products
