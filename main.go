@@ -65,7 +65,7 @@ func main() {
 	e.GET("/orders/:company_id/E1", ordersHandler.GetTransactionsByOrder)
 
 	// Start the server on IP 192.168.0.240 and port 8080
-	serverAddr := "192.168.0.184:8000"
+	serverAddr := "192.168.0.240:8000"
 	log.Printf("Server started at %s", serverAddr)
 	if err := e.Start(serverAddr); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
