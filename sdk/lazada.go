@@ -71,7 +71,7 @@ func NewClient(opts *ClientOptions) *IopClient {
 			"timestamp":   fmt.Sprintf("%d000", time.Now().Unix()),
 			"partner_id":  Version,
 		},
-		APIParams:  make(map[string]string), // Ensure map is initialized
+		APIParams:  map[string]string{},
 		FileParams: map[string][]byte{},
 	}
 }
@@ -116,9 +116,6 @@ func (lc *IopClient) ChangeRegion(region string) *IopClient {
 
 // AddAPIParam setter
 func (lc *IopClient) AddAPIParam(key string, val string) *IopClient {
-	if lc.APIParams == nil {
-		lc.APIParams = make(map[string]string) // Prevent nil map assignment error
-	}
 	lc.APIParams[key] = val
 	return lc
 }
@@ -127,10 +124,6 @@ func (lc *IopClient) AddAPIParam(key string, val string) *IopClient {
 func (lc *IopClient) AddFileParam(key string, val []byte) *IopClient {
 	lc.FileParams[key] = val
 	return lc
-}
-
-func (lc *IopClient) ClearAPIParams() {
-	lc.APIParams = make(map[string]string)
 }
 
 // Create sign from system params and api params
@@ -231,6 +224,7 @@ func (lc *IopClient) Execute(apiPath string, apiMethod string, bodyParams map[st
 				lc.AddAPIParam(k, v)
 				_ = writer.WriteField(k, v)
 			}
+
 		}
 
 		if err = writer.Close(); err != nil {
@@ -267,7 +261,6 @@ func (lc *IopClient) Execute(apiPath string, apiMethod string, bodyParams map[st
 	if err != nil {
 		return nil, nil, err
 	}
-
 	log.Println("Raw API Response:", string(respBody))
 
 	resp := &Response{}
@@ -295,5 +288,5 @@ func (lc *IopClient) Execute(apiPath string, apiMethod string, bodyParams map[st
 	lc.APIParams = nil
 	lc.FileParams = nil
 
-	return resp, nil, nil
+	return resp, nil, err
 }
