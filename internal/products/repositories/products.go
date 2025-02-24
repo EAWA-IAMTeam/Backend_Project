@@ -164,6 +164,7 @@ func (pr *ProductRepository) GetProductsByCompany(companyID int64, page, limit i
 		storeIDs = append(storeIDs, storeID)
 	}
 
+	log.Println(storeIDs)
 	// If no stores found, return empty result
 	if len(storeIDs) == 0 {
 		return []*models.MergeProduct{}, nil
@@ -210,6 +211,7 @@ func (pr *ProductRepository) GetProductsByCompany(companyID int64, page, limit i
 
 		storeProduct.StockItemID = stockItem.StockItemID
 
+		// log.Println(storeProduct)
 		// Unmarshal JSON string of image URLs into []string
 		if imageURLs != "" {
 			err = json.Unmarshal([]byte(imageURLs), &storeProduct.ImageURL)
@@ -233,6 +235,7 @@ func (pr *ProductRepository) GetProductsByCompany(companyID int64, page, limit i
 		result = append(result, item)
 	}
 
+	// log.Println(result)
 	return result, nil
 }
 

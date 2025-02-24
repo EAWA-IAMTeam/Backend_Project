@@ -117,26 +117,6 @@ func (h *RequestHandler) HandleGetRequest(c echo.Context) error {
 	}
 }
 
-// 	//Fetch response (wait up to 5 seconds)
-// 	msgs, err := sub.Fetch(1)
-// 	if err != nil || len(msgs) == 0 {
-// 		return c.JSON(http.StatusGatewayTimeout, map[string]string{"error": "Timeout waiting for response"})
-// 	}
-
-// 	// Parse and return response
-// 	var response json.RawMessage
-// 	if err := json.Unmarshal(msgs[0].Data, &response); err != nil {
-// 		return c.JSON(http.StatusInternalServerError, map[string]string{
-// 			"error": "Invalid response format",
-// 		})
-// 	}
-
-// 	// Acknowledge message processing
-// 	msgs[0].Ack()
-
-// 	return c.JSON(http.StatusOK, response)
-// }
-
 func (h *RequestHandler) PostSQLItems(c echo.Context) error {
 	companyID, _ := strconv.Atoi(c.Param("company_id"))
 	topic := c.Param("topic")
@@ -266,4 +246,129 @@ func (h *RequestHandler) PostProducts(c echo.Context) error {
 
 	}
 
+}
+
+func (h *RequestHandler) DeleteProduct(c echo.Context) error {
+	companyID, _ := strconv.Atoi(c.Param("company_id"))
+	topic := c.Param("topic")
+
+	// Read request body
+	var payload map[string]interface{}
+	if err := c.Bind(&payload); err != nil {
+		log.Println(payload)
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request payload"})
+	}
+
+	// Generate a unique request ID
+	requestID := "req-" + strconv.FormatInt(time.Now().UnixNano(), 10)
+
+	// Attach metadata to the request
+	payload["company_id"] = companyID
+	payload["request_id"] = requestID
+	data, _ := json.Marshal(payload)
+
+	// Publish request to JetStream
+	_, err := h.js.Publish(topic+".request.deleteproduct", data)
+	if err != nil {
+		log.Printf("Failed to publish request: %v", err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to publish request"})
+	}
+
+	// Subscribe for response
+	responseSubject := topic + ".response.*"
+	sub, err := h.js.PullSubscribe(responseSubject, topic+"-replies")
+	if err != nil {
+		log.Println(responseSubject)
+		log.Println(topic + requestID)
+		log.Printf("Failed to subscribe for response: %v", err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to subscribe for response"})
+	}
+
+	timeout := time.After(15 * time.Second)
+	for {
+		select {
+		case <-timeout:
+			return c.JSON(http.StatusGatewayTimeout, map[string]string{"error": "Timeout waiting for response"})
+		default:
+			msgs, err := sub.Fetch(1)
+			if err != nil || len(msgs) == 0 {
+				continue
+			}
+
+			// Parse and return response
+			var response json.RawMessage
+			if err := json.Unmarshal(msgs[0].Data, &response); err != nil {
+				log.Printf("Error parsing response: %v", err)
+				return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Invalid response format"})
+			}
+
+			// Acknowledge message processing
+			msgs[0].Ack()
+
+			return c.JSON(http.StatusOK, response)
+		}
+	}
+}
+
+func (h *RequestHandler) DeleteProductsBatch(c echo.Context) error {
+	companyID, _ := strconv.Atoi(c.Param("company_id"))
+	topic := c.Param("topic")
+
+	// Read request body
+	var payload map[string]interface{}
+	if err := c.Bind(&payload); err != nil {
+		log.Println(payload)
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request payload"})
+	}
+
+	// Generate a unique request ID
+	requestID := "req-" + strconv.FormatInt(time.Now().UnixNano(), 10)
+
+	// Attach metadata to the request
+	payload["company_id"] = companyID
+	payload["request_id"] = requestID
+	data, _ := json.Marshal(payload)
+
+	// Publish request to JetStream
+	_, err := h.js.Publish(topic+".request.deleteproductsbatch", data)
+	if err != nil {
+		log.Printf("Failed to publish request: %v", err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to publish request"})
+	}
+
+	// Subscribe for response
+	responseSubject := topic + ".response.*"
+	sub, err := h.js.PullSubscribe(responseSubject, topic+"-replies")
+	log.Println(responseSubject)
+	if err != nil {
+		// log.Printf("Failed to subscribe for response: %v", err)
+		log.Println(responseSubject)
+		log.Println(topic + requestID)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to subscribe for response"})
+	}
+
+	timeout := time.After(15 * time.Second)
+	for {
+		select {
+		case <-timeout:
+			return c.JSON(http.StatusGatewayTimeout, map[string]string{"error": "Timeout waiting for response"})
+		default:
+			msgs, err := sub.Fetch(1)
+			if err != nil || len(msgs) == 0 {
+				continue
+			}
+
+			// Parse and return response
+			var response json.RawMessage
+			if err := json.Unmarshal(msgs[0].Data, &response); err != nil {
+				log.Printf("Error parsing response: %v", err)
+				return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Invalid response format"})
+			}
+
+			// Acknowledge message processing
+			msgs[0].Ack()
+
+			return c.JSON(http.StatusOK, response)
+		}
+	}
 }

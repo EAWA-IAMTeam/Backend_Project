@@ -38,6 +38,7 @@ func (oh *OrderHandler) handleGetOrdersByCompany(msg *nats.Msg) {
 	if err := json.Unmarshal(msg.Data, &request); err != nil {
 		log.Println("Failed to unmarshal request:", err)
 		oh.respondWithError("Invalid request format", request.RequestID)
+		msg.Ack()
 		return
 	}
 
@@ -50,6 +51,7 @@ func (oh *OrderHandler) handleGetOrdersByCompany(msg *nats.Msg) {
 	if err != nil {
 		log.Printf("Error fetching orders: %v", err)
 		oh.respondWithError("Failed to fetch orders", request.RequestID)
+		msg.Ack()
 		return
 	}
 
@@ -57,6 +59,7 @@ func (oh *OrderHandler) handleGetOrdersByCompany(msg *nats.Msg) {
 	response, err := json.Marshal(orders)
 	if err != nil {
 		oh.respondWithError("Internal server error", request.RequestID)
+		msg.Ack()
 		return
 	}
 

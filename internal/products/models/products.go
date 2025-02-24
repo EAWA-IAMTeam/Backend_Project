@@ -48,7 +48,7 @@ type InsertResult struct {
 type Request struct {
 	ID              int64    `json:"id"`
 	CompanyID       int64    `json:"company_id"`
-	StoreID         int8     `json:"store_id"`
+	StoreID         int64    `json:"store_id"`
 	StockItemID     int64    `json:"stock_item_id"`
 	Price           float64  `json:"price"`
 	DiscountedPrice float64  `json:"discounted_price"`
