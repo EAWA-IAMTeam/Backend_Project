@@ -7,28 +7,38 @@ import (
 	"backend_project/internal/stores/services"
 	"log"
 
-	"github.com/labstack/echo"
+	"github.com/nats-io/nats.go"
 )
 
 func main() {
-	// Connect to the database
+	// Connect to database
 	db, err := database.ConnectDB()
 	if err != nil {
-		log.Fatalf("Failed to connect to the database: %v", err)
+		log.Fatalf("Failed to connect to database: %v", err)
 	}
 	defer db.Close()
 
-	// Initialize repository, service layers and handlers
-	storeRepo := repositories.NewStoreRepository(db)
-	storeService := services.NewStoreService(storeRepo)
-	storeHandler := handlers.NewStoreHandler(storeService)
+	// Connect to NATS
+	nc, err := nats.Connect("nats://192.168.0.189:4222")
+	if err != nil {
+		log.Fatalf("Failed to connect to NATS: %v", err)
+	}
 
-	// Create a new echo instance
-	e := echo.New()
+	js, err := nc.JetStream()
+	if err != nil {
+		log.Fatalf("Failed to initialize JetStream: %v", err)
+	}
 
-	// Define routes and pass the service to handlers
-	e.GET("/lazada/link/store", storeHandler.LazadaLinkStore)
+	// Initialize dependencies
+	repo := repositories.NewStoreRepository(db)
+	storeService := services.NewStoreService(repo)
+	handler := handlers.NewOrderHandler(storeService, js)
 
-	// Start the server
-	e.Logger.Fatal(e.Start(":8100"))
+	// Setup NATS subscriptions
+	if err := handler.SetupSubscriptions(); err != nil {
+		log.Fatalf("Failed to setup subscriptions: %v", err)
+	}
+
+	log.Println("Store Service running...")
+	select {} // Keep the service running
 }
