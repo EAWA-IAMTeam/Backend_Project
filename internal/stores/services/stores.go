@@ -4,51 +4,31 @@ import (
 	"backend_project/internal/stores/models"
 	"backend_project/internal/stores/repositories"
 	"fmt"
-	"log"
+	"time"
+	//"log"
 )
 
-/*
-TODO:
-1. Call Lazada 'auth/token/create' endpoint to generate access token. [done]
-2. Extract the access token from the response. [done]
-3. Call Lazada 'seller/get' endpoint to fetch store info using the access token. [done]
-4. check user_id and seller_id from the response are same or not [for isMain purpose under account table] [done]
-5. check the user_id is already exist in the database or not [done]
-6. if not exist, create a new record in the account table. [done]
-7.  if the store was exist, then update the name and access token or what.
-
-
-Exception ways:
-for step 1: might get response with error code. [need to validate the response first before return the response]
-same goes to step 3. [done]
-
-Importance:
-1. set prefix e-commerce platform name for the id for store and account table. example: Lazada239827329 [done]
-2. need to create a new record in the account and store table, only can insert access token info into accessToken table
-
-Problem Facing:
-1. how to receive company id? pass on body?
-2. The store expiry time issues [need to be in timestampz]
-3. accessToken ID set in autoincrement or backend set ourself.
-
-*Other features
-1. getAllStores by company_id
-2. change status to inactive (?
-*/
-
 type StoreService interface {
-	FetchStoreInfo(authCode string) (interface{}, error)
+	FetchStoreInfo(authCode string, companyID int64) (interface{}, error)
+	GetStoresByCompany(companyID int64) ([]*models.Store, error)
 }
 
 type storeService struct {
 	storeRepository repositories.StoreRepository
 }
 
+// create instances
 func NewStoreService(sr repositories.StoreRepository) StoreService {
 	return &storeService{storeRepository: sr}
 }
 
-func (ss *storeService) FetchStoreInfo(authCode string) (interface{}, error) {
+// Implement GetStoresByCompany
+func (ss *storeService) GetStoresByCompany(companyID int64) ([]*models.Store, error) {
+	return ss.storeRepository.GetStoresByCompany(companyID) // Call the repository method
+}
+
+// If FetchStoreInfo sometimes returns different data structures, using interface{} avoids type restrictions.
+func (ss *storeService) FetchStoreInfo(authCode string, companyID int64) (interface{}, error) {
 	linkStore, err := ss.LazadaGenerateAccessToken(authCode)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate access token: %v", err)
@@ -61,17 +41,19 @@ func (ss *storeService) FetchStoreInfo(authCode string) (interface{}, error) {
 
 	isMain := linkStore.UserID == linkStore.SellerID
 
-	existingAccount, err := ss.storeRepository.GetAccountByUserID("Lazada" + linkStore.UserID)
+	//existingAccount, err := ss.storeRepository.GetAccountByUserID("Lazada" + linkStore.UserID)
+	existingAccount, err := ss.storeRepository.GetAccountByUserID(linkStore.UserID)
 	if err != nil {
-		log.Printf("Warning: failed to check existing account: %v. Proceeding to create a new account.", err)
+		//log.Printf("Warning: failed to check existing account: %v. Proceeding to create a new account.", err)
 		existingAccount = nil
 	}
 
 	var accountID string
 	if existingAccount == nil {
 		account := &models.Account{
-			ID:        "Lazada" + linkStore.UserID,
-			CompanyID: 0,
+			//ID:        "Lazada" + linkStore.UserID,
+			ID:        linkStore.UserID,
+			CompanyID: companyID,
 			Name:      linkStore.Account,
 			Platform:  "Lazada",
 			Region:    linkStore.Country,
@@ -87,17 +69,23 @@ func (ss *storeService) FetchStoreInfo(authCode string) (interface{}, error) {
 	} else {
 		accountID = existingAccount.ID
 	}
+	//authprization time
+	authTime := time.Now()
+	//expiration time
+	expiresAt := authTime.Add(time.Second * time.Duration(604800)) // 7 days later
 
 	store := &models.Store{
-		ID:            "Lazada" + linkStore.SellerID,
-		CompanyID:     0,
+		//ID:            "Lazada" + linkStore.SellerID,
+		ID:            linkStore.SellerID,
+		CompanyID:     companyID,
 		AccessTokenID: 0,
-		// ExpiryTime:    "",
-		Name:         storeInfo.Name,
-		Platform:     "Lazada",
-		Region:       linkStore.Country,
-		Descriptions: "",
-		Status:       true,
+		AuthTime:      authTime,
+		ExpiryTime:    expiresAt,
+		Name:          storeInfo.Name,
+		Platform:      "Lazada",
+		Region:        linkStore.Country,
+		Descriptions:  "",
+		Status:        true,
 	}
 
 	err = ss.storeRepository.SaveStore(store)
