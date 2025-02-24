@@ -26,7 +26,7 @@ func (ss *storeService) LazadaGenerateAccessToken(authCode string) (*models.Link
 	if err != nil {
 		return nil, err
 	}
-
+	fmt.Println("authCode: ", authCode)
 	lazadaClient.AddAPIParam("code", authCode)
 	resp, authResp, err := lazadaClient.Execute("/auth/token/create", "GET", nil)
 	if err != nil {
