@@ -1,18 +1,20 @@
 package models
 
-// Define stores structure
+import "time"
 
+// Define stores structure
 // struct store table in Database
 type Store struct {
-	ID            string `json:"id"`
-	CompanyID     int64  `json:"company_id"`
-	AccessTokenID int8   `json:"access_token_id"`
-	ExpiryTime    string `json:"expiry_time"`
-	Name          string `json:"name"`
-	Platform      string `json:"platform"`
-	Region        string `json:"region"`
-	Descriptions  string `json:"descriptions"`
-	Status        bool   `json:"status"`
+	ID            string    `json:"id"`
+	CompanyID     int64     `json:"company_id"`
+	AccessTokenID int8      `json:"access_token_id"`
+	AuthTime      time.Time `json:"authorize_time"`
+	ExpiryTime    time.Time `json:"expiry_time"`
+	Name          string    `json:"name"`
+	Platform      string    `json:"platform"`
+	Region        string    `json:"region"`
+	Descriptions  string    `json:"descriptions"`
+	Status        bool      `json:"status"`
 }
 
 // struct account table in Database
