@@ -74,7 +74,7 @@ func (h *OrdersHandler) GetOrders(c echo.Context) error {
 			})
 		}
 	} else {
-		stopTime = time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+		stopTime = time.Date(2024, 12, 12, 0, 0, 0, 0, time.UTC)
 	}
 
 	// Set initial time window
