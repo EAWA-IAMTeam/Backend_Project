@@ -28,7 +28,7 @@ func (ss *storeService) LazadaGenerateAccessToken(authCode string) (*models.Link
 	}
 	fmt.Println("authCode: ", authCode)
 	lazadaClient.AddAPIParam("code", authCode)
-	resp, authResp, err := lazadaClient.Execute("/auth/token/create", "GET", nil)
+	resp, err := lazadaClient.Execute("/auth/token/create", "GET", nil)
 	if err != nil {
 		return nil, fmt.Errorf("API request error: %v", err)
 	}
@@ -38,6 +38,12 @@ func (ss *storeService) LazadaGenerateAccessToken(authCode string) (*models.Link
 	// Validate Lazada API response
 	if resp.Code != "0" {
 		return nil, fmt.Errorf("lazada API Error: %s - %s", resp.Code, resp.Message)
+	}
+
+	// Extract the first UserInfo entry
+	var authResp models.ApiResponseAccessToken
+	if err := json.Unmarshal(resp.Data, &authResp); err != nil {
+		return nil, fmt.Errorf("failed to parse Lazada auth response: %w", err)
 	}
 
 	// Extract the first UserInfo entry
@@ -71,7 +77,7 @@ func (ss *storeService) LazadaFetchStoreInfo(accessToken string) (*models.ApiRes
 
 	lazadaClient.AddAPIParam("access_token", accessToken)
 
-	response, _, err := lazadaClient.Execute("/seller/get", "GET", nil)
+	response, err := lazadaClient.Execute("/seller/get", "GET", nil)
 	if err != nil {
 		return nil, fmt.Errorf("lazada API request failed: %w", err)
 	}
