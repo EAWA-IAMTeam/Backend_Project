@@ -189,7 +189,7 @@ func (lc *IopClient) getServerURL() string {
 }
 
 // Execute sends the request though http.request and collect the response
-func (lc *IopClient) Execute(apiPath string, apiMethod string, bodyParams map[string]string) (*Response, *models.ApiResponseAccessToken, error) {
+func (lc *IopClient) Execute(apiPath string, apiMethod string, bodyParams map[string]string) (*Response, error) {
 	var req *http.Request
 	var err error
 	var contentType string
@@ -210,11 +210,11 @@ func (lc *IopClient) Execute(apiPath string, apiMethod string, bodyParams map[st
 			for key, val := range lc.FileParams {
 				part, err := writer.CreateFormFile("image", key)
 				if err != nil {
-					return nil, nil, err
+					return nil, err
 				}
 				_, err = part.Write(val)
 				if err != nil {
-					return nil, nil, err
+					return nil, err
 				}
 			}
 		}
@@ -228,7 +228,7 @@ func (lc *IopClient) Execute(apiPath string, apiMethod string, bodyParams map[st
 		}
 
 		if err = writer.Close(); err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 	}
 
@@ -246,7 +246,7 @@ func (lc *IopClient) Execute(apiPath string, apiMethod string, bodyParams map[st
 	req, err = http.NewRequest(apiMethod, fullURL, body)
 
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	if contentType != "" {
 		req.Header.Add("Content-Type", contentType)
@@ -254,12 +254,12 @@ func (lc *IopClient) Execute(apiPath string, apiMethod string, bodyParams map[st
 	log.Println(req)
 	httpResp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	defer httpResp.Body.Close()
 	respBody, err := io.ReadAll(httpResp.Body)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	log.Println("Raw API Response:", string(respBody))
 
@@ -267,7 +267,7 @@ func (lc *IopClient) Execute(apiPath string, apiMethod string, bodyParams map[st
 	err = json.Unmarshal(respBody, resp)
 	if err != nil {
 		log.Println("Error unmarshaling response:", err)
-		return nil, nil, err
+		return nil, err
 	}
 
 	// Log the full response
@@ -279,14 +279,14 @@ func (lc *IopClient) Execute(apiPath string, apiMethod string, bodyParams map[st
 		err = json.Unmarshal(respBody, &authResp)
 		if err != nil {
 			log.Println("Error unmarshaling LazadaAuthResponse:", err)
-		} else {
-			log.Printf("Parsed LazadaAuthResponse: %+v\n", authResp)
-			return resp, &authResp, nil
+			return nil, err
 		}
+		log.Printf("Parsed LazadaAuthResponse: %+v\n", authResp)
+		resp.Data = json.RawMessage(respBody) // Embed the auth response in the main response
 	}
 
 	lc.APIParams = nil
 	lc.FileParams = nil
 
-	return resp, nil, err
+	return resp, nil
 }
