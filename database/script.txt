@@ -1,0 +1,204 @@
+DO $$ 
+DECLARE
+    r RECORD;
+BEGIN
+    FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public')
+    LOOP
+        EXECUTE 'DROP TABLE IF EXISTS ' || quote_ident(r.tablename) || ' CASCADE';
+    END LOOP;
+END $$;
+
+CREATE TABLE "User" (
+    id BIGSERIAL PRIMARY KEY,
+    company_id BIGINT,
+    permission JSON,
+    email VARCHAR(255),
+    address VARCHAR(255),
+    first_name VARCHAR(100),
+    last_name VARCHAR(100),
+    nationality VARCHAR(100),
+    role VARCHAR(100),
+    city VARCHAR(100),
+    gender VARCHAR(50),
+    phone VARCHAR(50),
+    status BOOLEAN,
+    zipcode VARCHAR(20)
+);
+
+CREATE TABLE Company (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT,
+    registration_no BIGINT,
+    email VARCHAR(255),
+    name VARCHAR(255),
+    location VARCHAR(255),
+    owner VARCHAR(255),
+    region VARCHAR(100),
+    phone VARCHAR(50),
+    status BOOLEAN
+);
+
+CREATE TABLE Role (
+    id BIGSERIAL PRIMARY KEY,
+    company_id BIGINT, 
+    role VARCHAR(100),
+    module1 BOOLEAN,
+    module2 BOOLEAN
+);
+
+--UPDATE
+CREATE TABLE Account (
+    id BIGSERIAL PRIMARY KEY,
+    account_id BIGINT,
+    company_id BIGINT,
+    name VARCHAR(255),
+    platform VARCHAR(100),
+    region VARCHAR(100),
+    is_main BOOLEAN
+);
+
+CREATE TABLE AccessToken (
+    id BIGSERIAL PRIMARY KEY,
+    account_id BIGINT,
+    store_id BIGINT,
+    access_token VARCHAR(500),
+    refresh_token VARCHAR(500),
+    platform VARCHAR(100)
+);
+
+--UPDATE
+CREATE TABLE Store (
+    id BIGSERIAL PRIMARY KEY,
+    store_id BIGINT,
+    company_id BIGINT,
+    access_token_id BIGINT,
+    authorize_time TIMESTAMPTZ,
+    expiry_time TIMESTAMPTZ,
+    refresh_expiry_time TIMESTAMPTZ,
+    name VARCHAR(255),
+    platform VARCHAR(100),
+    region VARCHAR(100),
+    discount_code VARCHAR(50),
+    shipping_code VARCHAR(50),
+    transaction_code VARCHAR(50),
+    voucher_code VARCHAR(50),
+    descriptions VARCHAR(50),
+    status BOOLEAN
+);
+
+CREATE TABLE StockItem (
+    id BIGSERIAL PRIMARY KEY,
+    company_id BIGINT,
+    reserved_quantity BIGINT,
+    quantity BIGINT,
+    ref_cost REAL,
+    ref_price REAL,
+    weight REAL,
+    height REAL,
+    width REAL,
+    length REAL,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    stock_code VARCHAR(255) UNIQUE,
+    variation1 VARCHAR(255),
+    variation2 VARCHAR(255),
+    description VARCHAR(500),
+    platform VARCHAR(100),
+    media_url JSON,
+    stock_control BOOLEAN,
+    status BOOLEAN
+);
+
+CREATE TABLE StoreProduct (
+    id BIGSERIAL PRIMARY KEY,
+    store_id BIGINT,
+    stock_item_id BIGINT,
+    price REAL,
+    discounted_price REAL,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    sku VARCHAR(255),
+    currency VARCHAR(50),
+    status VARCHAR(100),
+    promotion_log JSON,
+    media_url JSON
+);
+
+CREATE TABLE EStock (
+    id BIGSERIAL PRIMARY KEY,
+    item_id BIGINT,
+    from_branch_id BIGINT,
+    to_branch_id BIGINT,
+    quantity VARCHAR(255),
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ,
+    status BOOLEAN
+);
+
+CREATE TABLE "Order" (
+    id BIGSERIAL,
+    platform_order_id VARCHAR(50),
+    store_id BIGINT,
+    shipment_date TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    order_date TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    tracking_id VARCHAR(255),
+    status VARCHAR(100),
+    data JSON,
+    item_list JSON,
+    log JSON,
+    PRIMARY KEY (id, order_date)
+) PARTITION BY RANGE (order_date);
+
+-- Create partitions for specific months (example: Jan 2025, Feb 2025)
+CREATE TABLE "Order_2025_01" PARTITION OF "Order"
+    FOR VALUES FROM ('2025-01-01') TO ('2025-02-01');
+
+CREATE TABLE "Order_2025_02" PARTITION OF "Order"
+    FOR VALUES FROM ('2025-02-01') TO ('2025-03-01');
+
+-- Default partition to capture unexpected dates
+CREATE TABLE "Order_default" PARTITION OF "Order"
+    DEFAULT;
+
+-- Indexing the partitioned table for faster queries
+CREATE INDEX idx_order_date ON "Order" (order_date);
+
+ALTER TABLE Company
+ADD CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES "User"(id);
+
+ALTER TABLE "User"
+ADD CONSTRAINT fk_company FOREIGN KEY (company_id) REFERENCES Company(id);
+
+
+
+ALTER TABLE "User"
+ADD CONSTRAINT unique_email UNIQUE (email);
+
+ALTER TABLE Role
+ADD CONSTRAINT fk_company FOREIGN KEY (company_id) REFERENCES Company(id);
+
+ALTER TABLE Account
+ADD CONSTRAINT fk_company FOREIGN KEY (company_id) REFERENCES Company(id);
+
+ALTER TABLE AccessToken
+ADD CONSTRAINT fk_store FOREIGN KEY (store_id) REFERENCES Store(id);
+ADD CONSTRAINT fk_account FOREIGN KEY (account_id) REFERENCES Account(id);
+
+ALTER TABLE Store
+ADD CONSTRAINT fk_company FOREIGN KEY (company_id) REFERENCES Company(id),
+ADD CONSTRAINT fk_access_token FOREIGN KEY (access_token_id) REFERENCES AccessToken(id);
+
+ALTER TABLE StockItem
+ADD CONSTRAINT fk_company FOREIGN KEY (company_id) REFERENCES Company(id);
+
+ALTER TABLE StoreProduct
+ADD CONSTRAINT fk_store FOREIGN KEY (store_id) REFERENCES Store(id);
+ADD CONSTRAINT fk_stock_item FOREIGN KEY (stock_item_id) REFERENCES StockItem(id);
+
+ALTER TABLE "Order"
+ADD CONSTRAINT fk_store FOREIGN KEY (store_id) REFERENCES Store(id);
+
+ALTER TABLE StockItem 
+ADD CONSTRAINT unique_company_stock UNIQUE (company_id, stock_code);
+
+DROP TABLE Store;
