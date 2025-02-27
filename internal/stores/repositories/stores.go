@@ -4,7 +4,6 @@ import (
 	"backend_project/internal/stores/models"
 	"database/sql"
 	"fmt"
-	"time"
 )
 
 type StoreRepository interface {
@@ -14,6 +13,8 @@ type StoreRepository interface {
 	SaveAccessToken(accessToken *models.AccessToken) error
 	UpdateStore(store *models.Store) error
 	GetStoresByCompany(companyID int64) ([]*models.Store, error)
+	GetTokenByStoreID(storeID string) (*models.AccessToken, error)
+	UpdateStoreStatus(store *models.Store) error
 }
 
 type storeRepository struct {
@@ -30,15 +31,16 @@ func NewStoreRepository(db *sql.DB) StoreRepository {
 func (sr *storeRepository) GetAccountByUserID(userID string) (*models.Account, error) {
 	fmt.Printf("userID: %v\n", userID)
 	query := `
-	SELECT id, company_id, name, platform, region, is_main 
+	SELECT id, account_id, company_id, name, platform, region, is_main 
 	FROM account 
-	WHERE id = $1`
+	WHERE account_id = $1`
 
 	row := sr.DB.QueryRow(query, userID)
 
 	var account models.Account
 	err := row.Scan(
 		&account.ID,
+		&account.AccountID,
 		&account.CompanyID,
 		&account.Name,
 		&account.Platform,
@@ -56,10 +58,10 @@ func (sr *storeRepository) GetAccountByUserID(userID string) (*models.Account, e
 // If the account does not exist, a new models.Account struct is created with the necessary details.
 func (sr *storeRepository) SaveAccount(account *models.Account) error {
 	query := `
-	INSERT INTO account (id, company_id, name, platform, region, is_main) 
+	INSERT INTO account (account_id, company_id, name, platform, region, is_main) 
 	VALUES ($1, $2, $3, $4, $5, $6)`
 	_, err := sr.DB.Exec(query,
-		account.ID,
+		account.AccountID,
 		account.CompanyID,
 		account.Name,
 		account.Platform,
@@ -95,33 +97,34 @@ func (sr *storeRepository) SaveAccount(account *models.Account) error {
 func (sr *storeRepository) SaveStore(store *models.Store) error {
 	// Check if store ID exists
 	var exists bool
-	checkQuery := `SELECT EXISTS(SELECT 1 FROM store WHERE id = $1)`
-	err := sr.DB.QueryRow(checkQuery, store.ID).Scan(&exists)
+	checkQuery := `SELECT EXISTS(SELECT 1 FROM store WHERE store_id = $1)`
+	err := sr.DB.QueryRow(checkQuery, store.StoreID).Scan(&exists)
 	if err != nil {
 		return fmt.Errorf("failed to check if store exists: %v", err)
 	}
 
 	if exists {
-		// If store exists, update authorize_time, expiry_time, and status
+		// If store exists, update authorize_time, expiry_time, refresh_expiry_time and status
 		updateQuery := `
 		UPDATE store 
-		SET authorize_time = $1, expiry_time = $2, status = $3 
-		WHERE id = $4`
-		_, err = sr.DB.Exec(updateQuery, store.AuthTime, store.ExpiryTime, store.Status, store.ID)
+		SET authorize_time = $1, expiry_time = $2, refresh_expiry_time = $3, status = $4 
+		WHERE store_id = $5`
+		_, err = sr.DB.Exec(updateQuery, store.AuthTime, store.ExpiryTime, store.RefreshExpiryTime, store.Status, store.StoreID)
 		if err != nil {
 			return fmt.Errorf("failed to update store: %v", err)
 		}
 	} else {
 		// If store does not exist, insert a new record
 		insertQuery := `
-		INSERT INTO store (id, company_id, access_token_id, authorize_time, expiry_time, name, platform, region, descriptions, status) 
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`
+		INSERT INTO store (store_id, company_id, access_token_id, authorize_time, expiry_time, refresh_expiry_time, name, platform, region, descriptions, status) 
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`
 		_, err = sr.DB.Exec(insertQuery,
-			store.ID,
+			store.StoreID,
 			store.CompanyID,
 			store.AccessTokenID,
 			store.AuthTime,
 			store.ExpiryTime,
+			store.RefreshExpiryTime,
 			store.Name,
 			store.Platform,
 			store.Region,
@@ -178,14 +181,40 @@ func (sr *storeRepository) SaveAccessToken(accessToken *models.AccessToken) erro
 	return nil
 }
 
+func (sr *storeRepository) GetTokenByStoreID(storeID string) (*models.AccessToken, error) {
+	fmt.Printf("storeID: %v\n", storeID)
+	query := `
+	SELECT id, account_id, store_id, access_token, refresh_token, platform
+	FROM accessToken 
+	WHERE store_id = $1`
+
+	row := sr.DB.QueryRow(query, storeID)
+
+	var token models.AccessToken
+	err := row.Scan(
+		&token.ID,
+		&token.AccountID,
+		&token.StoreID,
+		&token.AccessToken,
+		&token.RefreshToken,
+		&token.Platform)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil // No account found, return nil
+		}
+		return nil, fmt.Errorf("failed to get account by user ID: %v", err)
+	}
+	return &token, nil
+}
+
 func (sr *storeRepository) UpdateStore(store *models.Store) error {
 	query := `
 	UPDATE store 
 	SET access_token_id = $1 
-	WHERE id = $2`
+	WHERE store_id = $2`
 	_, err := sr.DB.Exec(query,
 		store.AccessTokenID,
-		store.ID)
+		store.StoreID)
 	if err != nil {
 		return fmt.Errorf("failed to update store: %v", err)
 	}
@@ -197,7 +226,7 @@ func (sr *storeRepository) GetStoresByCompany(companyID int64) ([]*models.Store,
 
 	// Get paginated data
 	query := `
-	SELECT id, company_id, access_token_id, authorize_time, expiry_time, 
+	SELECT id, store_id, company_id, access_token_id, authorize_time, expiry_time, refresh_expiry_time, 
 			name, platform, region, descriptions, status
 	FROM store 
 	WHERE company_id = $1
@@ -211,16 +240,16 @@ func (sr *storeRepository) GetStoresByCompany(companyID int64) ([]*models.Store,
 
 	var stores []*models.Store
 
-	now := time.Now() // Get current time
-
 	for rows.Next() {
 		var store models.Store
 		err := rows.Scan(
 			&store.ID,
+			&store.StoreID,
 			&store.CompanyID,
 			&store.AccessTokenID,
 			&store.AuthTime,
 			&store.ExpiryTime,
+			&store.RefreshExpiryTime,
 			&store.Name,
 			&store.Platform,
 			&store.Region,
@@ -231,18 +260,6 @@ func (sr *storeRepository) GetStoresByCompany(companyID int64) ([]*models.Store,
 			return nil, fmt.Errorf("failed to scan store: %v", err)
 		}
 
-		// Check if the access token is expired
-		if store.ExpiryTime.Before(now) {
-			store.Status = false // Set to inactive
-
-			// Update the database to reflect the status change
-			updateQuery := `UPDATE store SET status = false WHERE id = $1`
-			_, updateErr := sr.DB.Exec(updateQuery, store.ID)
-			if updateErr != nil {
-				return nil, fmt.Errorf("failed to update store status: %v", updateErr)
-			}
-		}
-
 		stores = append(stores, &store)
 	}
 
@@ -251,4 +268,18 @@ func (sr *storeRepository) GetStoresByCompany(companyID int64) ([]*models.Store,
 	}
 
 	return stores, nil
+}
+
+func (sr *storeRepository) UpdateStoreStatus(store *models.Store) error {
+	query := `
+	UPDATE store 
+	SET status = $1 
+	WHERE store_id = $2`
+	_, err := sr.DB.Exec(query,
+		store.Status,
+		store.StoreID)
+	if err != nil {
+		return fmt.Errorf("failed to update store: %v", err)
+	}
+	return nil
 }
