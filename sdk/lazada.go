@@ -285,6 +285,18 @@ func (lc *IopClient) Execute(apiPath string, apiMethod string, bodyParams map[st
 		resp.Data = json.RawMessage(respBody) // Embed the auth response in the main response
 	}
 
+	// 🔥 Special Handling for `/auth/token/refresh`
+	if apiPath == "/auth/token/refresh" {
+		var refreshResp models.ApiResponseAccessToken
+		err = json.Unmarshal(respBody, &refreshResp)
+		if err != nil {
+			log.Println("Error unmarshaling LazadaRefreshResponse:", err)
+			return nil, err
+		}
+		log.Printf("Parsed LazadaRefreshResponse: %+v\n", refreshResp)
+		resp.Data = json.RawMessage(respBody) // Embed the refresh response in the main response
+	}
+
 	lc.APIParams = nil
 	lc.FileParams = nil
 
