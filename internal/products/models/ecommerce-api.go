@@ -18,6 +18,10 @@ type Sku struct {
 	Quantity     int      `json:"quantity"`
 	Price        float64  `json:"price"`
 	SpecialPrice float64  `json:"special_price"`
+	Weight       string   `json:"product_weight"`
+	Length       string   `json:"package_length"`
+	Width        string   `json:"package_width"`
+	Height       string   `json:"package_height"`
 }
 
 // Lazada API Response Product Struct

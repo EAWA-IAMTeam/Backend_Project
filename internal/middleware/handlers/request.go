@@ -101,12 +101,14 @@ func (h *RequestHandler) HandleGetRequest(c echo.Context) error {
 			if err != nil || len(msgs) == 0 {
 				continue
 			}
+			msgs[0].Ack()
 
 			// Parse and return response
 			var response json.RawMessage
 			if err := json.Unmarshal(msgs[0].Data, &response); err != nil {
 				log.Printf("Error : %v", err)
 				return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Invalid response format"})
+
 			}
 
 			// Acknowledge message processing
@@ -163,6 +165,7 @@ func (h *RequestHandler) PostSQLItems(c echo.Context) error {
 			if err != nil || len(msgs) == 0 {
 				continue
 			}
+			msgs[0].Ack()
 
 			//Parse and return response
 			var response json.RawMessage
@@ -230,6 +233,7 @@ func (h *RequestHandler) PostProducts(c echo.Context) error {
 			if err != nil || len(msgs) == 0 {
 				continue
 			}
+			msgs[0].Ack()
 
 			//Parse and return response
 			var response json.RawMessage
@@ -294,6 +298,7 @@ func (h *RequestHandler) DeleteProduct(c echo.Context) error {
 			if err != nil || len(msgs) == 0 {
 				continue
 			}
+			msgs[0].Ack()
 
 			// Parse and return response
 			var response json.RawMessage
@@ -357,6 +362,7 @@ func (h *RequestHandler) DeleteProductsBatch(c echo.Context) error {
 			if err != nil || len(msgs) == 0 {
 				continue
 			}
+			msgs[0].Ack()
 
 			// Parse and return response
 			var response json.RawMessage

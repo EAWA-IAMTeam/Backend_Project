@@ -1,6 +1,7 @@
 package services
 
 import (
+	"backend_project/database"
 	"backend_project/internal/config"
 	"backend_project/internal/products/models"
 	"backend_project/sdk"
@@ -9,8 +10,23 @@ import (
 	"log"
 )
 
+// Get Access Token
+func (ps *ProductService) GetAccessToken(storeID int64) string {
+	db, err := database.ConnectDB()
+	if err != nil {
+		return ""
+	}
+
+	var accessToken string
+	db.QueryRow("SELECT access_token FROM accesstoken WHERE store_id = $1", storeID).Scan(&accessToken)
+	log.Println("Acess Token: ", accessToken)
+	return accessToken
+
+}
+
 // initLazadaClient initializes and returns a Lazada API client
-func (ps *ProductService) initLazadaClient() (*sdk.IopClient, error) {
+func (ps *ProductService) initLazadaClient(storeID int64) (*sdk.IopClient, error) {
+
 	env := config.LoadConfig()
 	clientOptions := sdk.ClientOptions{
 		APIKey:    env.AppKey,
@@ -18,7 +34,8 @@ func (ps *ProductService) initLazadaClient() (*sdk.IopClient, error) {
 		Region:    "MY", // Consider using a constant for region
 	}
 	lazadaClient := sdk.NewClient(&clientOptions)
-	lazadaClient.SetAccessToken(env.AccessToken)
+	// lazadaClient.SetAccessToken(env.AccessToken)
+	lazadaClient.SetAccessToken(ps.GetAccessToken(storeID))
 	return lazadaClient, nil
 }
 
@@ -30,13 +47,13 @@ func (ps *ProductService) FetchLazadaMappedProducts(storeID int64) ([]models.Pro
 		return nil, fmt.Errorf("failed to retrieve SKU list")
 	}
 
-	lazadaClient, err := ps.initLazadaClient()
+	lazadaClient, err := ps.initLazadaClient(storeID)
 	if err != nil {
 		return nil, err
 	}
 
 	resp, err := lazadaClient.Execute("/products/get", "GET", nil)
-	log.Print(resp)
+	// log.Print(resp)
 	if err != nil {
 		log.Printf("Failed to fetch products from API: %v", err)
 		return nil, fmt.Errorf("failed to fetch products")
@@ -94,7 +111,7 @@ func (ps *ProductService) FetchLazadaUnmappedProducts(storeID int64) ([]models.P
 
 	// TODO: Need to change the access token according to storeID to fetch the products of the store
 	// TODO: Need to store the access token in the database
-	lazadaClient, err := ps.initLazadaClient()
+	lazadaClient, err := ps.initLazadaClient(storeID)
 	if err != nil {
 		return nil, err
 	}

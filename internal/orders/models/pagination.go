@@ -1,7 +1,7 @@
 package models
 
 type PaginatedRequest struct {
-	CompanyID  int8   `json:"company_id"`
+	CompanyID  int64  `json:"company_id"`
 	RequestID  string `json:"request_id"`
 	Pagination struct {
 		Page  int `json:"page"`

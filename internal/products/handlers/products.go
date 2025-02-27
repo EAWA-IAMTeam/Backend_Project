@@ -222,15 +222,18 @@ func (ph *ProductHandler) InsertProducts(msg *nats.Msg) {
 	}
 
 	statusCode := http.StatusCreated
+	message := "Products inserted successfully"
 	if len(result.Duplicates) > 0 {
 		statusCode = http.StatusConflict
+		message = "Some products already exist in the database"
+
 	}
 
 	// Construct response
 	response := map[string]interface{}{
 		"request_id": requestID,
 		"status":     statusCode,
-		"message":    "Products inserted successfully",
+		"message":    message,
 		"data":       result,
 	}
 	// Send response back to JetStream (`product.response.{request_id}`)

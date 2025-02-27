@@ -43,7 +43,7 @@ func (oh *OrderHandler) handleGetOrdersByCompany(msg *nats.Msg) {
 	}
 
 	// Get orders from repository
-	orders, _, err := oh.repo.GetOrdersByCompany(
+	orders, _, err := oh.repo.FetchOrdersByCompanyID(
 		request.CompanyID,
 		request.Pagination.Page,
 		request.Pagination.Limit,

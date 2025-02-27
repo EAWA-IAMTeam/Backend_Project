@@ -26,9 +26,8 @@ func (pr *ProductRepository) GetStockItemsByCompany(companyID int64, page, limit
 	offset := (page - 1) * limit
 
 	query := `
-	SELECT id, company_id, stock_code, stock_control, ref_price, ref_cost, weight, 
-		   height, width, length, variation1, variation2, quantity, reserved_quantity,
-		   platform, description, status 
+	SELECT id, company_id, stock_code, stock_control, ref_price, ref_cost, quantity, reserved_quantity,
+		   description, status 
 	FROM stockitem 
 	WHERE company_id = $1
 	LIMIT $2 OFFSET $3`
@@ -50,9 +49,7 @@ func (pr *ProductRepository) GetStockItemsByCompany(companyID int64, page, limit
 		var item models.StockItem
 		if err := rows.Scan(
 			&item.ID, &item.CompanyID, &item.StockCode, &item.StockControl, &item.RefPrice,
-			&item.RefCost, &item.Weight, &item.Height, &item.Width,
-			&item.Length, &item.Variation1, &item.Variation2, &item.Quantity, &item.ReservedQuantity,
-			&item.Platform, &item.Description, &item.Status,
+			&item.RefCost, &item.Quantity, &item.ReservedQuantity, &item.Description, &item.Status,
 		); err != nil {
 			return nil, err
 		}
@@ -72,8 +69,8 @@ func (pr *ProductRepository) InsertStockItemsByCompany(companyID int64, stockIte
 	query := `
 		INSERT INTO stockitem 
 		(company_id, ref_price, ref_cost, quantity, reserved_quantity, stock_code, stock_control, 
-		weight, height, width, length, variation1, variation2, platform, description, status, created_at, updated_at) 
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, NOW(), NOW())
+		description, status, updated_at) 
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
 		ON CONFLICT (company_id, stock_code) 
 		DO UPDATE SET 
 			ref_price = EXCLUDED.ref_price,
@@ -81,13 +78,6 @@ func (pr *ProductRepository) InsertStockItemsByCompany(companyID int64, stockIte
 			quantity = EXCLUDED.quantity,
 			reserved_quantity = EXCLUDED.reserved_quantity,
 			stock_control = EXCLUDED.stock_control,
-			weight = EXCLUDED.weight,
-			height = EXCLUDED.height,
-			width = EXCLUDED.width,
-			length = EXCLUDED.length,
-			variation1 = EXCLUDED.variation1,
-			variation2 = EXCLUDED.variation2,
-			platform = EXCLUDED.platform,
 			description = EXCLUDED.description,
 			status = EXCLUDED.status,
 			updated_at = NOW()
@@ -107,8 +97,7 @@ func (pr *ProductRepository) InsertStockItemsByCompany(companyID int64, stockIte
 		stockCodes[item.StockCode] = true
 		_, err := stmt.Exec(
 			companyID, item.RefPrice, item.RefCost, item.Quantity, item.ReservedQuantity,
-			item.StockCode, item.StockControl, item.Weight, item.Height, item.Width, item.Length,
-			item.Variation1, item.Variation2, item.Platform, item.Description, item.Status,
+			item.StockCode, item.StockControl, item.Description, item.Status,
 		)
 		if err != nil {
 			fmt.Println("Error executing insert query:", err)
@@ -253,8 +242,8 @@ func (pr *ProductRepository) InsertProductBatch(products []*models.Request) (*mo
 	defer tx.Rollback()
 
 	stmt, err := tx.Prepare(`
-        INSERT INTO storeproduct (store_id, stock_item_id, price, discounted_price, sku, currency, status, media_url)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        INSERT INTO storeproduct (store_id, stock_item_id, sku, currency, price, status, media_url, updated_at, discounted_price, weight, width, height, length  )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
     `)
 	if err != nil {
 		return result, err
@@ -285,12 +274,17 @@ func (pr *ProductRepository) InsertProductBatch(products []*models.Request) (*mo
 		res, err := stmt.Exec(
 			product.StoreID,
 			product.StockItemID,
-			product.Price,
-			product.DiscountedPrice,
 			product.SKU,
 			product.Currency,
+			product.Price,
 			product.Status,
 			string(mediaURLJSON),
+			product.UpdatedAt,
+			product.DiscountedPrice,
+			product.Weight,
+			product.Width,
+			product.Height,
+			product.Length,
 		)
 
 		if err != nil {
