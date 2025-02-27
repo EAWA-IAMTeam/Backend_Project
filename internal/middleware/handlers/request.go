@@ -54,6 +54,10 @@ func (h *RequestHandler) HandleGetRequest(c echo.Context) error {
 
 	page, _ := strconv.Atoi(c.QueryParam("page"))
 	limit, _ := strconv.Atoi(c.QueryParam("limit"))
+	status := c.QueryParam("status")
+	createdAfter := c.QueryParam("created_after")
+	stopAfter := c.QueryParam("stop_after")
+	sortDirection := c.QueryParam("sort_direction")
 
 	//Set defaults if not provided
 	if page < 1 {
@@ -68,8 +72,12 @@ func (h *RequestHandler) HandleGetRequest(c echo.Context) error {
 
 	// Create request payload
 	request := map[string]interface{}{
-		"company_id": companyID,
-		"request_id": requestID,
+		"company_id":     companyID,
+		"request_id":     requestID,
+		"status":         status,
+		"created_after":  createdAfter,
+		"stop_after":     stopAfter,
+		"sort_direction": sortDirection,
 		"pagination": map[string]int{
 			"page":  page,
 			"limit": limit,
@@ -90,8 +98,8 @@ func (h *RequestHandler) HandleGetRequest(c echo.Context) error {
 		log.Printf("Failed to subscribe for response: %v", err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to subscribe for response"})
 	}
-	// Fetch response (wait up to 15 seconds)
-	timeout := time.After(15 * time.Second)
+	// Fetch response (wait up to 5 seconds)
+	timeout := time.After(5 * time.Minute)
 	for {
 		select {
 		case <-timeout:
@@ -154,7 +162,7 @@ func (h *RequestHandler) PostSQLItems(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to subscribe for response"})
 	}
 
-	timeout := time.After(5 * time.Second)
+	timeout := time.After(5 * time.Minute)
 	for {
 		select {
 		case <-timeout:
@@ -222,7 +230,7 @@ func (h *RequestHandler) PostProducts(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to subscribe for response"})
 	}
 
-	timeout := time.After(5 * time.Second)
+	timeout := time.After(5 * time.Minute)
 	for {
 		select {
 		case <-timeout:
@@ -288,7 +296,7 @@ func (h *RequestHandler) DeleteProduct(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to subscribe for response"})
 	}
 
-	timeout := time.After(15 * time.Second)
+	timeout := time.After(5 * time.Minute)
 	for {
 		select {
 		case <-timeout:
@@ -352,7 +360,7 @@ func (h *RequestHandler) DeleteProductsBatch(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to subscribe for response"})
 	}
 
-	timeout := time.After(15 * time.Second)
+	timeout := time.After(1 * time.Minute)
 	for {
 		select {
 		case <-timeout:

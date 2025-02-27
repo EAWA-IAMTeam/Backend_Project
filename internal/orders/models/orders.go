@@ -1,5 +1,11 @@
 package models
 
+type OrdersData struct {
+	CountTotal int     `json:"counttotal"`
+	Count      int     `json:"count"`
+	Orders     []Order `json:"orders"`
+}
+
 // Order struct
 type Order struct {
 	OrderID                     int64          `json:"order_id"`
@@ -61,26 +67,6 @@ type Data struct {
 	RefundReason        string  `json:"reason_text"`
 	CreatedAt           string  `json:"created_at"`
 	SystemUpdateTime    string  `json:"updated_at"`
-}
-
-type Item struct {
-	Name                      string  `json:"name"`
-	Status                    string  `json:"status"`
-	PaidPrice                 float64 `json:"paid_price"`
-	ItemPrice                 float64 `json:"item_price"`
-	Quantity                  int     `json:"quantity"`
-	Sku                       string  `json:"sku"`
-	ShopSku                   string  `json:"shop_sku"`
-	TrackingCode              string  `json:"tracking_code"`
-	ShippingProviderType      string  `json:"shipping_provider_type"`
-	ShippingFeeOriginal       float64 `json:"shipping_fee_original"`
-	ShippingFeeDiscountSeller float64 `json:"shipping_fee_discount_seller"`
-	ShippingAmount            float64 `json:"shipping_amount"`
-	OrderID                   int64   `json:"order_id"`
-	ReturnStatus              string  `json:"return_status"`
-	ReturnReason              string  `json:"reason"`
-	ImageUrl                  string  `json:"product_main_image"`
-	// Add other fields as necessary based on the JSON structure
 }
 
 type Address struct {

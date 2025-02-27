@@ -2,21 +2,157 @@ package repositories
 
 import (
 	"backend_project/internal/orders/models"
+	"backend_project/sdk"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"log"
+	"strconv"
 	"strings"
 )
 
-type OrderRepository struct {
-	DB *sql.DB
+type OrderRepository interface {
+	FetchOrders(createdAfter string, createdBefore string, offset int, limit int, status string, sort_direction string) (*models.OrdersData, error)
+	SaveOrder(order *models.Order, companyID int64) error
+	FetchOrdersByCompanyID(companyID int64, page, limit int) ([]models.Order, int, error)
 }
 
-func NewOrderRepository(db *sql.DB) *OrderRepository {
-	return &OrderRepository{DB: db}
+type orderRepository struct {
+	client      *sdk.IopClient
+	appKey      string
+	accessToken string
+	DB          *sql.DB
 }
 
-func (r *OrderRepository) FetchOrdersByCompanyID(companyID int64, page, limit int) ([]models.Order, int, error) {
+func NewOrderRepository(client *sdk.IopClient, appKey, accessToken string, db *sql.DB) OrderRepository {
+	return &orderRepository{client, appKey, accessToken, db}
+}
+
+func (r *orderRepository) FetchOrders(createdAfter string, createdBefore string, offset int, limit int, status string, sort_direction string) (*models.OrdersData, error) {
+	queryParams := map[string]string{
+		"appKey":      r.appKey,
+		"accessToken": r.accessToken,
+	}
+
+	if createdAfter != "" {
+		r.client.AddAPIParam("created_after", createdAfter)
+	}
+	if createdBefore != "" {
+		r.client.AddAPIParam("created_before", createdBefore)
+	}
+	r.client.AddAPIParam("offset", strconv.Itoa(offset))
+	r.client.AddAPIParam("limit", strconv.Itoa(limit))
+	if status != "" {
+		r.client.AddAPIParam("status", status)
+	}
+
+	if sort_direction != "" {
+		r.client.AddAPIParam("sort_direction", sort_direction)
+	}
+
+	resp, err := r.client.Execute("/orders/get", "GET", queryParams)
+	if err != nil {
+		log.Println("Error fetching orders:", err)
+		return nil, err
+	}
+
+	var apiResponse models.OrdersData
+	err = json.Unmarshal(resp.Data, &apiResponse)
+	if err != nil {
+		log.Println("JSON Unmarshal Error:", err)
+		return nil, err
+	}
+
+	log.Printf("API response: %+v", apiResponse.CountTotal)
+
+	if apiResponse.Orders == nil {
+		log.Println("API response `data` field is missing or null")
+		return nil, errors.New("no data returned from API")
+	}
+
+	return &apiResponse, nil
+}
+
+func (r *orderRepository) SaveOrder(order *models.Order, companyID int64) error {
+	if len(order.Items) == 0 {
+		return errors.New("order has no items")
+	}
+
+	// Check if the order already exists
+	var exists bool
+	err := r.DB.QueryRow("SELECT EXISTS(SELECT 1 FROM \"Order\" WHERE platform_order_id = $1 AND company_id = $2)", order.OrderID, companyID).Scan(&exists)
+	if err != nil {
+		log.Printf("Error checking order existence: %v", err)
+		return err
+	}
+
+	itemListJSON, err := json.Marshal(order.Items)
+	if err != nil {
+		log.Printf("Error marshalling items: %v", err)
+		return err
+	}
+
+	sqlData := ConvertOrderToSQLData(*order)
+	sqlDataJSON, err := json.Marshal(sqlData)
+	if err != nil {
+		log.Printf("Error marshalling SQL data: %v", err)
+		return err
+	}
+
+	if exists {
+		// Update existing order
+		query := `UPDATE "Order" SET store_id = $2, tracking_id = $3, status = $4, item_list = $5, data = $6, order_date = $7 WHERE platform_order_id = $1 AND company_id = $8`
+		_, err = r.DB.Exec(query, order.OrderID, order.ItemsCount, order.Items[0].TrackingCode, order.Statuses[0], string(itemListJSON), string(sqlDataJSON), order.CreatedAt, companyID)
+	} else {
+		// Insert new order
+		query := `INSERT INTO "Order" (platform_order_id, store_id, tracking_id, status, item_list, data, company_id, order_date) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
+		_, err = r.DB.Exec(query, order.OrderID, order.ItemsCount, order.Items[0].TrackingCode, order.Statuses[0], string(itemListJSON), string(sqlDataJSON), companyID, order.CreatedAt)
+	}
+
+	if err != nil {
+		log.Printf("Error saving order: %v", err)
+		return err
+	}
+
+	return nil
+}
+
+func ConvertOrderToSQLData(order models.Order) models.Data {
+	// Ensure there is at least one element in the RefundStatus slice before accessing
+	var refundAmount float64
+	var refundReason string
+
+	if len(order.RefundStatus) > 0 {
+		// Convert from ReturnRefund struct
+		refundAmount = float64(order.RefundStatus[0].RefundAmount)
+		refundReason = order.RefundStatus[0].ReasonText
+	}
+
+	return models.Data{
+		OrderID:                   order.OrderID,
+		CustomerName:              order.CustomerFirstName + " " + order.CustomerLastName,
+		CustomerPhone:             order.AddressShipping.Phone,
+		CustomerAddress:           order.AddressShipping.Address1,
+		CourierService:            order.DeliveryInfo,
+		TransactionFee:            0, // Assumption
+		ShippingFee:               order.ShippingFee,
+		ProcessFee:                0, // Assumption
+		ServiceFee:                0, // Assumption
+		SellerDiscount:            order.VoucherSeller,
+		PlatformDiscount:          order.VoucherPlatform,
+		ShippingFeeDiscountSeller: order.ShippingFeeDiscountSeller,
+		TotalPrice:                order.Price,
+		Currency:                  "MYR",
+		TotalReleasedAmount:       order.TotalReleasedAmount,
+		Status:                    order.Statuses,
+		RefundAmount:              int(refundAmount),
+		RefundReason:              refundReason,
+		CreatedAt:                 order.CreatedAt,
+		SystemUpdateTime:          order.UpdatedAt,
+	}
+}
+
+func (r *orderRepository) FetchOrdersByCompanyID(companyID int64, page, limit int) ([]models.Order, int, error) {
 	//Calculate offset
 	offset := (page - 1) * limit
 	query := `
@@ -112,71 +248,3 @@ func (r *OrderRepository) FetchOrdersByCompanyID(companyID int64, page, limit in
 
 	return orders, 0, nil
 }
-
-// // GetOrdersByCompany fetches orders by company ID
-// func (or *OrderRepository) GetOrdersByCompany(companyID int8, page, limit int) ([]*models.Order, int, error) {
-// 	//Calculate offset
-// 	offset := (page - 1) * limit
-
-// 	// Get paginated data
-// 	query := `
-// 	SELECT platform_order_id, tracking_id, status, data::json as data, item_list::json as item_list
-// 	FROM "Order"
-// 	WHERE company_id = $1
-// 	ORDER BY order_date DESC
-// 	LIMIT $2 OFFSET $3`
-
-// 	// query := `
-// 	//     SELECT id, platform_order_id, store_id, company_id, shipment_date, order_date, tracking_id, status,
-// 	//            data::json as data,
-// 	//            item_list::json as item_list
-// 	//     FROM "Order"
-// 	//     WHERE company_id = $1`
-
-// 	rows, err := or.DB.Query(query, companyID, limit, offset)
-// 	if err != nil {
-// 		return nil, 0, err
-// 	}
-// 	defer rows.Close()
-
-// 	var orders []*models.Order
-// 	var dataJson []byte
-// 	var OrderItems []byte
-
-// 	for rows.Next() {
-// 		var order models.Order
-// 		err := rows.Scan(
-// 			&order.OrderID,
-// 			&order.PlatformOrderID,
-// 			&order.StoreID,
-// 			&order.CompanyID,
-// 			&order.ShipmentDate,
-// 			&order.OrderDate,
-// 			&order.Tr
-// 			&order.OrderStatus,
-// 			&dataJson,
-// 			&OrderItems,
-// 		)
-// 		if err != nil {
-// 			return nil, 0, err
-// 		}
-
-// 		// // Log the raw JSON data
-// 		// log.Printf("Raw data JSON: %s", string(dataJson))
-// 		// log.Printf("Raw item list JSON: %s", string(OrderItems))
-
-// 		err = json.Unmarshal(dataJson, &order.Data)
-// 		if err != nil {
-// 			return nil, 0, err
-// 		}
-
-// 		err = json.Unmarshal(OrderItems, &order.OrderItems)
-// 		if err != nil {
-// 			return nil, 0, err
-// 		}
-
-// 		orders = append(orders, &order)
-// 	}
-
-// 	return orders, 0, nil
-// }
