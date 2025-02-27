@@ -1,8 +1,11 @@
 package handlers
 
 import (
-
+	//"backend_project/internal/stores/models"
 	"backend_project/internal/stores/services"
+	//"strconv"
+
+	//"backend_project/internal/stores/repositories"
 	"encoding/json"
 	"log"
 
@@ -70,6 +73,14 @@ func (sh *StoreHandler) handleLazadaLinkStore(msg *nats.Msg) {
 		msg.Ack()
 		return
 	}
+
+	// Convert companyID to int64
+	// companyID, err := strconv.ParseInt(companyIDStr, 10, 64)
+	// if err != nil {
+	// 	sh.respondWithError("Invalid Company ID format", requestID)
+	// 	msg.Ack()
+	// 	return
+	// }
 
 	response, err := sh.storeService.FetchStoreInfo(authCode, companyIDStr)
 	if err != nil {
