@@ -99,6 +99,12 @@ func (oh *OrderHandler) GetOrders(msg *nats.Msg) {
 	//Extract comapny ID from subject
 	var request models.PaginatedRequest
 
+	if err := json.Unmarshal(msg.Data, &request); err != nil {
+		log.Println("Failed to unmarshal request:", err)
+		oh.respondWithError("Invalid request format", request.RequestID)
+		msg.Ack()
+		return
+	}
 	// if request.CompanyID == 0 {
 	// 	return c.JSON(http.StatusBadRequest, map[string]string{"message": "Company ID is required"})
 	// }
