@@ -26,8 +26,8 @@ func main() {
 	// e.POST("/api/orders", requestHandler.HandlePostRequest)
 	// /company/:company_id/employee/:employeeID
 	e.GET("company/:company_id/topic/:topic", requestHandler.HandleGetRequest)
-	e.GET("company/:company_id/topic/:topic/method/linkstore", requestHandler.LinkStore)
-	e.GET("company/:company_id/topic/:topic/method/:method", requestHandler.GetStore)
+	e.GET("/company/:company_id/topic/:topic/method/linkstore", requestHandler.LinkStore)
+	e.GET("/company/:company_id/topic/:topic/method/:method", requestHandler.GetStore)
 	//e.GET("/callback", handleLazadaCallback)
 
 	log.Println("🚀 API Gateway running on :8081")
