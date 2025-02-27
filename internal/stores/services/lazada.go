@@ -68,6 +68,42 @@ func (ss *storeService) LazadaGenerateAccessToken(authCode string) (*models.Link
 	return linkStore, nil
 }
 
+// refresh access token
+func (ss *storeService) LazadaRefreshToken(refreshToken string) (*models.LinkStore, error) {
+	lazadaClient, err := ss.initLazadaClient()
+	if err != nil {
+		return nil, err
+	}
+	fmt.Println("Refresh Token: ", refreshToken)
+	lazadaClient.AddAPIParam("refresh_token", refreshToken)
+	resp, err := lazadaClient.Execute("/auth/token/refresh", "GET", nil)
+	if err != nil {
+		return nil, fmt.Errorf("API request error: %v", err)
+	}
+
+	// log.Printf("Lazada API response: %+v\n", resp)
+
+	// Validate Lazada API response
+	if resp.Code != "0" {
+		return nil, fmt.Errorf("lazada API Error: %s - %s", resp.Code, resp.Message)
+	}
+
+	var authResp models.ApiResponseAccessToken
+	if err := json.Unmarshal(resp.Data, &authResp); err != nil {
+		return nil, fmt.Errorf("failed to parse Lazada auth response: %w", err)
+	}
+
+	// Map the response to LinkStore
+	linkStore := &models.LinkStore{
+		AccessToken:      authResp.AccessToken,
+		ExpiresIn:        authResp.ExpiresIn,
+		RefreshToken:     authResp.RefreshToken,
+		RefreshExpiresIn: authResp.RefreshExpiresIn,
+	}
+
+	return linkStore, nil
+}
+
 // Call Lazada API to fetch store info using the access token
 func (ss *storeService) LazadaFetchStoreInfo(accessToken string) (*models.ApiResponseStoreInfo, error) {
 	lazadaClient, err := ss.initLazadaClient()
