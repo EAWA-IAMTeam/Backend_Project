@@ -32,40 +32,48 @@ func (ss *storeService) GetStoresByCompany(companyID int64) ([]*models.Store, er
 
 	now := time.Now()
 	for _, store := range stores {
-		if store.ExpiryTime.Before(now) { // Access token expired
-			if store.RefreshExpiryTime.After(now) { // Refresh token still valid
-				//get refresh token from access token table, pass back access token
-				token, err1 := ss.storeRepository.GetTokenByStoreID(store.StoreID)
-				if err1 != nil {
-					return nil, fmt.Errorf("failed to get token: %v", err)
-				}
-				// Call API to refresh access , pass back linkstore
-				newToken, err := ss.LazadaRefreshToken(token.RefreshToken)
-				if err != nil {
-					return nil, fmt.Errorf("failed to refresh access token: %v", err)
-				}
-				token.AccessToken = newToken.AccessToken
-				token.RefreshToken = newToken.RefreshToken
+		// Only update status or tokens for active stores
+		if store.Status {
 
-				//update access token and refresh token
-				err = ss.storeRepository.SaveAccessToken(token)
-
-				if err != nil {
-					return nil, fmt.Errorf("failed to update store tokens: %v", err)
-				}
-				// Update tokens in DB
-				store.ExpiryTime = now.Add(time.Second * time.Duration(604800)) // 7 days later
-				store.RefreshExpiryTime = now.Add(time.Second * time.Duration(2592000))
-				err = ss.storeRepository.SaveStore(store)
-
-				if err != nil {
-					return nil, fmt.Errorf("failed to update store info: %v", err)
-				}
-			} else { // Refresh token also expired → Mark store as inactive
+			// Check login time if the current date is 30 days from the AuthTime
+			if now.Sub(store.AuthTime) >= 30*24*time.Hour {
 				store.Status = false
 				err = ss.storeRepository.UpdateStoreStatus(store)
 				if err != nil {
 					return nil, fmt.Errorf("failed to update store status: %v", err)
+				}
+				continue // Skip further checks for this store
+			}
+
+			if store.ExpiryTime.Before(now) { // Access token expired
+				if store.RefreshExpiryTime.After(now) { // Refresh token still valid
+					//get refresh token from access token table, pass back access token
+					token, err1 := ss.storeRepository.GetTokenByStoreID(store.StoreID)
+					if err1 != nil {
+						return nil, fmt.Errorf("failed to get token: %v", err)
+					}
+					// Call API to refresh access , pass back linkstore
+					newToken, err := ss.LazadaRefreshToken(token.RefreshToken)
+					if err != nil {
+						return nil, fmt.Errorf("failed to refresh access token: %v", err)
+					}
+					token.AccessToken = newToken.AccessToken
+					token.RefreshToken = newToken.RefreshToken
+
+					//update access token and refresh token
+					err = ss.storeRepository.SaveAccessToken(token)
+
+					if err != nil {
+						return nil, fmt.Errorf("failed to update store tokens: %v", err)
+					}
+					// Update tokens in DB
+					store.ExpiryTime = now.Add(time.Second * time.Duration(604800)) // 7 days later
+					store.RefreshExpiryTime = now.Add(time.Second * time.Duration(2592000))
+					err = ss.storeRepository.SaveStore(store)
+
+					if err != nil {
+						return nil, fmt.Errorf("failed to update store info: %v", err)
+					}
 				}
 			}
 		}
@@ -120,10 +128,10 @@ func (ss *storeService) FetchStoreInfo(authCode string, companyID int64) (interf
 	//authorization time
 	authTime := time.Now()
 
-	// expiresAt := authTime.Add(time.Second * time.Duration(604800))         // 7 days later
-	// refreshExpiresAt := authTime.Add(time.Second * time.Duration(2592000)) // 30 days later
-	expiresAt := authTime.Add(time.Minute * 1)
-	refreshExpiresAt := authTime.Add(time.Minute * 5)
+	expiresAt := authTime.Add(time.Second * time.Duration(604800))         // 7 days later
+	refreshExpiresAt := authTime.Add(time.Second * time.Duration(2592000)) // 30 days later
+	// expiresAt := authTime.Add(time.Minute * 1)
+	// refreshExpiresAt := authTime.Add(time.Minute * 5)
 
 	store := &models.Store{
 		//ID:            "Lazada" + linkStore.SellerID,
