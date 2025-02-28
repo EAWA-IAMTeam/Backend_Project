@@ -1,13 +1,14 @@
 package sdk
 
 import (
+	"backend_project/internal/stores/models"
 	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"mime/multipart"
 	"net/http"
@@ -115,10 +116,6 @@ func (lc *IopClient) ChangeRegion(region string) *IopClient {
 
 // AddAPIParam setter
 func (lc *IopClient) AddAPIParam(key string, val string) *IopClient {
-	// Initialize the map if it is nil
-	if lc.APIParams == nil {
-		lc.APIParams = make(map[string]string)
-	}
 	lc.APIParams[key] = val
 	return lc
 }
@@ -261,15 +258,48 @@ func (lc *IopClient) Execute(apiPath string, apiMethod string, bodyParams map[st
 		return nil, err
 	}
 	defer httpResp.Body.Close()
-	respBody, err := ioutil.ReadAll(httpResp.Body)
+	respBody, err := io.ReadAll(httpResp.Body)
 	if err != nil {
 		return nil, err
 	}
+	log.Println("Raw API Response:", string(respBody))
+
 	resp := &Response{}
 	err = json.Unmarshal(respBody, resp)
+	if err != nil {
+		log.Println("Error unmarshaling response:", err)
+		return nil, err
+	}
+
+	// Log the full response
+	// log.Printf("Lazada API Response: %+v\n", resp)
+
+	// 🔥 Special Handling for `/auth/token/create`
+	if apiPath == "/auth/token/create" {
+		var authResp models.ApiResponseAccessToken
+		err = json.Unmarshal(respBody, &authResp)
+		if err != nil {
+			log.Println("Error unmarshaling LazadaAuthResponse:", err)
+			return nil, err
+		}
+		log.Printf("Parsed LazadaAuthResponse: %+v\n", authResp)
+		resp.Data = json.RawMessage(respBody) // Embed the auth response in the main response
+	}
+
+	// 🔥 Special Handling for `/auth/token/refresh`
+	if apiPath == "/auth/token/refresh" {
+		var refreshResp models.ApiResponseAccessToken
+		err = json.Unmarshal(respBody, &refreshResp)
+		if err != nil {
+			log.Println("Error unmarshaling LazadaRefreshResponse:", err)
+			return nil, err
+		}
+		log.Printf("Parsed LazadaRefreshResponse: %+v\n", refreshResp)
+		resp.Data = json.RawMessage(respBody) // Embed the refresh response in the main response
+	}
 
 	lc.APIParams = nil
 	lc.FileParams = nil
 
-	return resp, err
+	return resp, nil
 }

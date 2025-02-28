@@ -127,6 +127,129 @@ func (h *RequestHandler) HandleGetRequest(c echo.Context) error {
 	}
 }
 
+// link store
+func (h *RequestHandler) LinkStore(c echo.Context) error {
+	companyID, _ := strconv.Atoi(c.Param("company_id"))
+	topic := c.Param("topic")
+
+	// page, _ := strconv.Atoi(c.QueryParam("page"))
+	// limit, _ := strconv.Atoi(c.QueryParam("limit"))
+	code := c.QueryParam("code")
+
+	// Validate auth_code
+	if code == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Authorization code is required"})
+	}
+
+	// Generate a unique request ID
+	requestID := "req-" + strconv.FormatInt(time.Now().UnixNano(), 10)
+
+	// Create request payload
+	request := map[string]interface{}{
+		"company_id": companyID,
+		"code":       code,
+		"request_id": requestID,
+	}
+	data, _ := json.Marshal(request)
+
+	//Subscribe to Jetstream to fetch messages
+	_, err := h.js.Publish(topic+".request.linkstore", data)
+	if err != nil {
+		log.Printf("Failed to publish request: %v", err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to publish request"})
+	}
+
+	//Subscribe to shared response consumer (order.response.*)
+	sub, err := h.js.PullSubscribe(topic+".response.*", topic+"-replies")
+	if err != nil {
+		log.Printf("Failed to subscribe for response: %v", err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to subscribe for response"})
+	}
+	// Fetch response (wait up to 15 seconds)
+	timeout := time.After(15 * time.Second)
+	for {
+		select {
+		case <-timeout:
+			return c.JSON(http.StatusGatewayTimeout, map[string]string{"error": "Timeout waiting for response"})
+		default:
+			msgs, err := sub.Fetch(1) // Set max wait per fetch
+			if err != nil {
+				log.Println(msgs)
+				log.Printf("Failed to fetch message: %v", err)
+				return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to fetch response"})
+			}
+
+			if len(msgs) > 0 {
+				// Process message
+				var response json.RawMessage
+				if err := json.Unmarshal(msgs[0].Data, &response); err != nil {
+					log.Printf("Error parsing response: %v", err)
+					return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Invalid response format"})
+				}
+
+				msgs[0].Ack() // Acknowledge the message
+				return c.JSON(http.StatusOK, response)
+			}
+		}
+	}
+}
+
+func (h *RequestHandler) GetStore(c echo.Context) error {
+	companyID, _ := strconv.Atoi(c.Param("company_id"))
+	topic := c.Param("topic")
+
+	// Generate a unique request ID
+	requestID := "req-" + strconv.FormatInt(time.Now().UnixNano(), 10)
+
+	// Create request payload
+	request := map[string]interface{}{
+		"company_id": companyID,
+		"request_id": requestID,
+	}
+	data, _ := json.Marshal(request)
+
+	//Subscribe to Jetstream to fetch messages
+	_, err := h.js.Publish(topic+".request.getstore", data)
+	if err != nil {
+		log.Printf("Failed to publish request: %v", err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to publish request"})
+	}
+
+	//Subscribe to shared response consumer (order.response.*)
+	sub, err := h.js.PullSubscribe(topic+".response.*", topic+"-replies")
+	if err != nil {
+		log.Printf("Failed to subscribe for response: %v", err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to subscribe for response"})
+	}
+	// Fetch response (wait up to 15 seconds)
+	timeout := time.After(15 * time.Second)
+	for {
+		select {
+		case <-timeout:
+			return c.JSON(http.StatusGatewayTimeout, map[string]string{"error": "Timeout waiting for response"})
+		default:
+			msgs, err := sub.Fetch(1) // Set max wait per fetch
+			if err != nil {
+				log.Println(msgs)
+				log.Printf("Failed to fetch message: %v", err)
+				return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to fetch response"})
+			}
+
+			if len(msgs) > 0 {
+				// Process message
+				var response json.RawMessage
+				if err := json.Unmarshal(msgs[0].Data, &response); err != nil {
+					log.Printf("Error parsing response: %v", err)
+					return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Invalid response format"})
+				}
+
+				msgs[0].Ack() // Acknowledge the message
+				return c.JSON(http.StatusOK, response)
+			}
+		}
+	}
+}
+
 func (h *RequestHandler) PostSQLItems(c echo.Context) error {
 	companyID, _ := strconv.Atoi(c.Param("company_id"))
 	topic := c.Param("topic")

@@ -33,6 +33,8 @@ func main() {
 	// e.POST("/api/orders", requestHandler.HandlePostRequest)
 	// /company/:company_id/employee/:employeeID
 	e.GET("company/:company_id/topic/:topic/method/:method", requestHandler.HandleGetRequest)
+	e.GET("/company/:company_id/topic/:topic/linkstore", requestHandler.LinkStore)
+	e.GET("/company/:company_id/topic/:topic/getstore", requestHandler.GetStore)
 	e.POST("company/:company_id/topic/:topic/method/postsqlitem", requestHandler.PostSQLItems)
 	e.POST("company/:company_id/topic/:topic/method/insertproducts", requestHandler.PostProducts)
 	e.DELETE("company/:company_id/topic/:topic/method/deleteproduct", requestHandler.DeleteProduct)
