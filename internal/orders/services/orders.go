@@ -7,8 +7,8 @@ import (
 )
 
 type OrdersService interface {
-	GetOrders(createdAfter string, createdBefore string, offset int, limit int, status string, sort_direction string) ([]models.Order, int, error)
-	SaveOrder(order *models.Order, companyID string) error
+	GetOrders(createdAfter string, createdBefore string, offset int, limit int, status string, sort_direction string, companyID string, storeID string) ([]models.Order, int, error)
+	SaveOrder(order *models.Order, companyID string, storeID string) error
 	FetchOrdersByCompanyID(companyID string) ([]models.Order, error)
 }
 
@@ -23,8 +23,8 @@ func NewOrdersService(repo repositories.OrdersRepository, itemListService ItemLi
 	return &ordersService{repo, itemListService, returnService, paymentService}
 }
 
-func (s *ordersService) GetOrders(createdAfter string, createdBefore string, offset int, limit int, status string, sort_direction string) ([]models.Order, int, error) {
-	ordersData, err := s.repo.FetchOrders(createdAfter, createdBefore, offset, limit, status, sort_direction)
+func (s *ordersService) GetOrders(createdAfter string, createdBefore string, offset int, limit int, status string, sort_direction string, companyID string, storeID string) ([]models.Order, int, error) {
+	ordersData, err := s.repo.FetchOrders(createdAfter, createdBefore, offset, limit, status, sort_direction, companyID, storeID)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -74,8 +74,8 @@ func (s *ordersService) GetOrders(createdAfter string, createdBefore string, off
 	return ordersData.Orders, ordersData.CountTotal, nil
 }
 
-func (s *ordersService) SaveOrder(order *models.Order, companyID string) error {
-	return s.repo.SaveOrder(order, companyID)
+func (s *ordersService) SaveOrder(order *models.Order, companyID string, storeID string) error {
+	return s.repo.SaveOrder(order, companyID, storeID)
 }
 
 func (s *ordersService) FetchOrdersByCompanyID(companyID string) ([]models.Order, error) {

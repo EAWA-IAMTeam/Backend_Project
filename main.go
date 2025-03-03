@@ -35,14 +35,16 @@ func main() {
 		Region:    "MY",
 	}
 	iopClient := sdk.NewClient(&clientOptions)
-	iopClient.SetAccessToken(env.AccessToken)
+
+	// Note: We no longer set a global access token here since it's retrieved
+	// from the database per request based on company_id
 
 	// Initialize Echo server
 	e := echo.New()
 
 	// Repositories
 	returnRepo := repositories.NewReturnRepository(iopClient, env.AppKey, env.AccessToken, db)
-	ordersRepo := repositories.NewOrdersRepository(iopClient, env.AppKey, env.AccessToken, db)
+	ordersRepo := repositories.NewOrdersRepository(iopClient, db, env.AppKey)
 	itemListRepo := repositories.NewItemListRepository(iopClient, env.AppKey, env.AccessToken, db)
 	paymentRepo := repositories.NewPaymentsRepository(iopClient, env.AppKey, env.AccessToken, db)
 
@@ -56,7 +58,7 @@ func main() {
 	returnHandler := handlers.NewReturnHandler(returnService)
 
 	// Initialize orders handler with all required services
-	ordersHandler := handlers.NewOrdersHandler(ordersService, itemListService, returnHandler, paymentService)
+	ordersHandler := handlers.NewOrdersHandler(ordersService, itemListService, returnHandler, paymentService, db)
 
 	// Define API routes
 	e.GET("/orders/:company_id", ordersHandler.GetOrders)

@@ -3,11 +3,11 @@ package handlers
 import (
 	"backend_project/internal/orders/models"
 	"backend_project/internal/orders/services"
+	"database/sql"
 	"fmt"
-	"net/http"
-
 	"log"
 	"math"
+	"net/http"
 	"strconv"
 	"strings"
 	"sync"
@@ -30,12 +30,47 @@ type OrdersHandler struct {
 	itemListService services.ItemListService
 	returnHandler   *ReturnHandler
 	paymentService  services.PaymentService
+	db              *sql.DB
 }
 
-func NewOrdersHandler(ordersService services.OrdersService, itemListService services.ItemListService, returnHandler *ReturnHandler, paymentService services.PaymentService) *OrdersHandler {
-	return &OrdersHandler{ordersService, itemListService, returnHandler, paymentService}
+func NewOrdersHandler(ordersService services.OrdersService, itemListService services.ItemListService, returnHandler *ReturnHandler, paymentService services.PaymentService, db *sql.DB) *OrdersHandler {
+	return &OrdersHandler{ordersService, itemListService, returnHandler, paymentService, db}
 }
 
+// FetchStoresByCompanyID fetches store IDs for a company from the database
+func (h *OrdersHandler) FetchStoresByCompanyID(companyID string, platform string) ([]string, error) {
+	// Create a query to get all store IDs for this company and platform
+	query := `
+		SELECT store_id 
+		FROM "accesstoken" 
+		WHERE company_id = $1 AND platform = $2`
+
+	// Execute the query
+	rows, err := h.db.Query(query, companyID, platform)
+	if err != nil {
+		log.Printf("Error fetching store IDs: %v", err)
+		return nil, err
+	}
+	defer rows.Close()
+
+	// Collect the store IDs
+	var storeIDs []string
+	for rows.Next() {
+		var storeID string
+		if err := rows.Scan(&storeID); err != nil {
+			log.Printf("Error scanning store ID: %v", err)
+			continue
+		}
+		storeIDs = append(storeIDs, storeID)
+	}
+
+	if err = rows.Err(); err != nil {
+		log.Printf("Error iterating through store IDs: %v", err)
+		return nil, err
+	}
+
+	return storeIDs, nil
+}
 func (h *OrdersHandler) GetOrders(c echo.Context) error {
 	companyID := c.Param("company_id")
 	if companyID == "" {
@@ -43,6 +78,22 @@ func (h *OrdersHandler) GetOrders(c echo.Context) error {
 	}
 
 	status := c.Param("status")
+
+	// Get optional store_id from query parameters
+	storeID := c.QueryParam("store_id")
+
+	// If no specific store_id was provided, fetch all store IDs for this company for Lazada
+	var storeIDs []string
+	var err error
+	if storeID == "" {
+		storeIDs, err = h.FetchStoresByCompanyID(companyID, "Lazada")
+		if err != nil {
+			log.Printf("Failed to fetch store IDs: %v", err)
+			// Continue with empty storeIDs, which will use default behavior
+		}
+	} else {
+		storeIDs = []string{storeID}
+	}
 
 	// Parse createdAfter or set default
 	createdAfter := c.QueryParam("created_after")
@@ -74,7 +125,7 @@ func (h *OrdersHandler) GetOrders(c echo.Context) error {
 			})
 		}
 	} else {
-		stopTime = time.Date(2024, 12, 12, 0, 0, 0, 0, time.UTC)
+		stopTime = time.Date(2025, 2, 1, 0, 0, 0, 0, time.UTC)
 	}
 
 	// Set initial time window
@@ -82,13 +133,56 @@ func (h *OrdersHandler) GetOrders(c echo.Context) error {
 	allOrders := make([]models.Order, 0)
 	totalProcessedCount := 0
 
+	// If we have specific store IDs, process each one separately
+	if len(storeIDs) > 0 {
+		for _, storeID := range storeIDs {
+			storeOrders, storeProcessedCount, err := h.processOrdersForTimeWindows(
+				c, companyID, storeID, status, currentStartTime, stopTime)
+			if err != nil {
+				return err
+			}
+
+			allOrders = append(allOrders, storeOrders...)
+			totalProcessedCount += storeProcessedCount
+		}
+	} else {
+		// Process with no specific store ID (will use default access token)
+		processedOrders, processedCount, err := h.processOrdersForTimeWindows(
+			c, companyID, "", status, currentStartTime, stopTime)
+		if err != nil {
+			return err
+		}
+
+		allOrders = append(allOrders, processedOrders...)
+		totalProcessedCount += processedCount
+	}
+
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"orders":          allOrders,
+		"total_processed": totalProcessedCount,
+	})
+}
+
+// Helper function to process orders for a specific time window
+func (h *OrdersHandler) processOrdersForTimeWindows(
+	c echo.Context,
+	companyID string,
+	storeID string,
+	status string,
+	startTime time.Time,
+	stopTime time.Time) ([]models.Order, int, error) {
+
+	allOrders := make([]models.Order, 0)
+	totalProcessedCount := 0
+	currentStartTime := startTime
+
 	for {
 		// Set 3-month window
 		currentEndTime := currentStartTime.AddDate(0, 3, 0)
 		currentCreatedAfter := currentStartTime.Format("2006-01-02T15:04:05-07:00")
 		currentCreatedBefore := currentEndTime.Format("2006-01-02T15:04:05-07:00")
 
-		log.Printf("Processing orders from %s to %s", currentCreatedAfter, currentCreatedBefore)
+		log.Printf("Processing orders from %s to %s for store ID: %s", currentCreatedAfter, currentCreatedBefore, storeID)
 
 		// Process current window
 		state := ProcessingState{
@@ -104,7 +198,7 @@ func (h *OrdersHandler) GetOrders(c echo.Context) error {
 		if sortDirection == "" {
 			sortDirection = "DESC"
 		} else if sortDirection != "ASC" && sortDirection != "DESC" {
-			return c.JSON(http.StatusBadRequest, map[string]string{
+			return nil, 0, c.JSON(http.StatusBadRequest, map[string]string{
 				"message": "sort_direction must be either ASC or DESC",
 			})
 		}
@@ -131,9 +225,11 @@ func (h *OrdersHandler) GetOrders(c echo.Context) error {
 					limit,
 					status,
 					sortDirection,
+					companyID,
+					storeID,
 				)
 				if err != nil {
-					return c.JSON(http.StatusInternalServerError, map[string]string{
+					return nil, 0, c.JSON(http.StatusInternalServerError, map[string]string{
 						"message": "Failed to retrieve orders",
 						"error":   err.Error(),
 					})
@@ -167,7 +263,7 @@ func (h *OrdersHandler) GetOrders(c echo.Context) error {
 							order.Items = append(order.Items, placeholderItem)
 						}
 
-						err := h.ordersService.SaveOrder(&order, companyID)
+						err := h.ordersService.SaveOrder(&order, companyID, storeID)
 						if err != nil {
 							errorChan <- fmt.Errorf("failed to save order %d: %v", order.OrderID, err)
 						}
@@ -235,10 +331,7 @@ func (h *OrdersHandler) GetOrders(c echo.Context) error {
 		}
 	}
 
-	return c.JSON(http.StatusOK, map[string]interface{}{
-		"orders":          allOrders,
-		"total_processed": totalProcessedCount,
-	})
+	return allOrders, totalProcessedCount, nil
 }
 
 func (h *OrdersHandler) FetchOrdersByCompanyID(c echo.Context) error {

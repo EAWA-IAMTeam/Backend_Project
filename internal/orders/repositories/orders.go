@@ -12,31 +12,66 @@ import (
 )
 
 type OrdersRepository interface {
-	FetchOrders(createdAfter string, createdBefore string, offset int, limit int, status string, sort_by string) (*models.OrdersData, error)
-	SaveOrder(order *models.Order, companyID string) error
+	FetchOrders(createdAfter string, createdBefore string, offset int, limit int, status string, sort_by string, companyID string, storeID string) (*models.OrdersData, error)
+	SaveOrder(order *models.Order, companyID string, storeID string) error
 	FetchOrdersByCompanyID(companyID string) ([]models.Order, error)
+	GetAccessToken(companyID string, platform string, storeID string) (string, error)
 }
 
 type ordersRepository struct {
-	client      *sdk.IopClient
-	appKey      string
-	accessToken string
-	DB          *sql.DB
+	client *sdk.IopClient
+	DB     *sql.DB
+	appKey string
 }
 
-func NewOrdersRepository(client *sdk.IopClient, appKey, accessToken string, db *sql.DB) OrdersRepository {
-	return &ordersRepository{client, appKey, accessToken, db}
+func NewOrdersRepository(client *sdk.IopClient, db *sql.DB, appKey string) OrdersRepository {
+	return &ordersRepository{client, db, appKey}
 }
 
-// FUNCTION PART--------------------------------------------------------------
+// GetAccessToken retrieves access token from database based on companyID, platform and optionally storeID
+func (r *ordersRepository) GetAccessToken(companyID string, platform string, storeID string) (string, error) {
+	var query string
+	var args []interface{}
 
-// FetchPayout through External API Lazada
-func (r *ordersRepository) FetchOrders(createdAfter string, createdBefore string, offset int, limit int, status string, sort_direction string) (*models.OrdersData, error) {
-	queryParams := map[string]string{
-		"appKey":      r.appKey,
-		"accessToken": r.accessToken,
+	if storeID != "" {
+		// If storeID is provided, use it for more specific matching
+		query = `
+			SELECT access_token 
+			FROM "accesstoken" 
+			WHERE company_id = $1 AND platform = $2 AND store_id = $3
+			LIMIT 1`
+		args = []interface{}{companyID, platform, storeID}
+	} else {
+		// Otherwise just get by company and platform
+		query = `
+			SELECT access_token 
+			FROM "accesstoken" 
+			WHERE company_id = $1 AND platform = $2
+			LIMIT 1`
+		args = []interface{}{companyID, platform}
 	}
 
+	var accessToken string
+	err := r.DB.QueryRow(query, args...).Scan(&accessToken)
+	if err != nil {
+		log.Printf("Error retrieving access token: %v", err)
+		return "", err
+	}
+
+	return accessToken, nil
+}
+
+// FetchOrders through External API Lazada
+func (r *ordersRepository) FetchOrders(createdAfter string, createdBefore string, offset int, limit int, status string, sort_direction string, companyID string, storeID string) (*models.OrdersData, error) {
+	accessToken, err := r.GetAccessToken(companyID, "Lazada", storeID)
+	if err != nil {
+		log.Printf("Failed to retrieve access token for company %s: %v", companyID, err)
+		return nil, err
+	}
+
+	// Set access token using the proper method
+	r.client.SetAccessToken(accessToken)
+	// Add API parameters
 	if createdAfter != "" {
 		r.client.AddAPIParam("created_after", createdAfter)
 	}
@@ -48,12 +83,12 @@ func (r *ordersRepository) FetchOrders(createdAfter string, createdBefore string
 	if status != "" {
 		r.client.AddAPIParam("status", status)
 	}
-
 	if sort_direction != "" {
 		r.client.AddAPIParam("sort_direction", sort_direction)
 	}
 
-	resp, err := r.client.Execute("/orders/get", "GET", queryParams)
+	// Execute the API call
+	resp, err := r.client.Execute("/orders/get", "GET", nil)
 	if err != nil {
 		log.Println("Error fetching orders:", err)
 		return nil, err
@@ -76,7 +111,8 @@ func (r *ordersRepository) FetchOrders(createdAfter string, createdBefore string
 	return &apiResponse, nil
 }
 
-func (r *ordersRepository) SaveOrder(order *models.Order, companyID string) error {
+// SaveOrder should be modified to accept storeID as a parameter
+func (r *ordersRepository) SaveOrder(order *models.Order, companyID string, storeID string) error {
 	if len(order.Items) == 0 {
 		return errors.New("order has no items")
 	}
@@ -105,11 +141,11 @@ func (r *ordersRepository) SaveOrder(order *models.Order, companyID string) erro
 	if exists {
 		// Update existing order
 		query := `UPDATE "Order" SET store_id = $2, tracking_id = $3, status = $4, item_list = $5, data = $6, order_date = $7 WHERE platform_order_id = $1 AND company_id = $8`
-		_, err = r.DB.Exec(query, order.OrderID, order.ItemsCount, order.Items[0].TrackingCode, order.Statuses[0], string(itemListJSON), string(sqlDataJSON), order.CreatedAt, companyID)
+		_, err = r.DB.Exec(query, order.OrderID, storeID, order.Items[0].TrackingCode, order.Statuses[0], string(itemListJSON), string(sqlDataJSON), order.CreatedAt, companyID)
 	} else {
 		// Insert new order
 		query := `INSERT INTO "Order" (platform_order_id, store_id, tracking_id, status, item_list, data, company_id, order_date) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
-		_, err = r.DB.Exec(query, order.OrderID, order.ItemsCount, order.Items[0].TrackingCode, order.Statuses[0], string(itemListJSON), string(sqlDataJSON), companyID, order.CreatedAt)
+		_, err = r.DB.Exec(query, order.OrderID, storeID, order.Items[0].TrackingCode, order.Statuses[0], string(itemListJSON), string(sqlDataJSON), companyID, order.CreatedAt)
 	}
 
 	if err != nil {
