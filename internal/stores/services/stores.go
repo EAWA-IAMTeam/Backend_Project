@@ -158,6 +158,7 @@ func (ss *storeService) FetchStoreInfo(authCode string, companyID int64) (interf
 		ID:           0, // Auto-incremented ID (if applicable)
 		AccountID:    accountID,
 		StoreID:      store.StoreID,
+		CompanyID:    companyID,
 		AccessToken:  linkStore.AccessToken,
 		RefreshToken: linkStore.RefreshToken,
 		Platform:     "Lazada",

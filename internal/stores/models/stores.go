@@ -32,6 +32,7 @@ type Account struct {
 
 type AccessToken struct {
 	ID           int8   `json:"id"`
+	CompanyID    int64  `json:"company_id"`
 	AccountID    string `json:"account_id"`
 	StoreID      string `json:"store_id"`
 	AccessToken  string `json:"access_token"`

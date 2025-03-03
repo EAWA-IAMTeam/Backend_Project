@@ -34,8 +34,8 @@ func (ps *ProductService) initLazadaClient(storeID int64) (*sdk.IopClient, error
 		Region:    "MY", // Consider using a constant for region
 	}
 	lazadaClient := sdk.NewClient(&clientOptions)
-	// lazadaClient.SetAccessToken(env.AccessToken)
-	lazadaClient.SetAccessToken(ps.GetAccessToken(storeID))
+	lazadaClient.SetAccessToken(env.AccessToken)
+	// lazadaClient.SetAccessToken(ps.GetAccessToken(storeID))
 	return lazadaClient, nil
 }
 

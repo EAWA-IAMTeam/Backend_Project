@@ -137,7 +137,7 @@ func (pr *ProductRepository) InsertStockItemsByCompany(companyID int64, stockIte
 // GetProductsByCompany fetches products by company ID
 func (pr *ProductRepository) GetProductsByCompany(companyID int64, page, limit int) ([]*models.MergeProduct, error) {
 	// Step 1: Fetch all store IDs for the given company
-	storeQuery := `SELECT id FROM store WHERE company_id = $1`
+	storeQuery := `SELECT store_id FROM store WHERE company_id = $1`
 	storeRows, err := pr.DB.Query(storeQuery, companyID)
 	if err != nil {
 		return nil, err
@@ -153,7 +153,7 @@ func (pr *ProductRepository) GetProductsByCompany(companyID int64, page, limit i
 		storeIDs = append(storeIDs, storeID)
 	}
 
-	log.Println(storeIDs)
+	log.Println("Hello", storeIDs)
 	// If no stores found, return empty result
 	if len(storeIDs) == 0 {
 		return []*models.MergeProduct{}, nil

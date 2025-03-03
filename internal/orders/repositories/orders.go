@@ -143,6 +143,7 @@ func ConvertOrderToSQLData(order models.Order) models.Data {
 		ShippingFeeDiscountSeller: order.ShippingFeeDiscountSeller,
 		TotalPrice:                order.Price,
 		Currency:                  "MYR",
+		PaymentMethod:             order.PaymentMethod,
 		TotalReleasedAmount:       order.TotalReleasedAmount,
 		Status:                    order.Statuses,
 		RefundAmount:              int(refundAmount),

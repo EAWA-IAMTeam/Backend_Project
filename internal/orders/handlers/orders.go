@@ -139,7 +139,7 @@ func (oh *OrderHandler) GetOrders(msg *nats.Msg) {
 			msg.Ack()
 		}
 	} else {
-		stopTime = time.Date(2025, 2, 1, 0, 0, 0, 0, time.UTC)
+		stopTime = time.Date(2024, 2, 1, 0, 0, 0, 0, time.UTC)
 	}
 
 	// Set initial time window
@@ -149,7 +149,7 @@ func (oh *OrderHandler) GetOrders(msg *nats.Msg) {
 
 	for {
 		// Set 3-month window
-		currentEndTime := currentStartTime.AddDate(0, 0, 3)
+		currentEndTime := currentStartTime.AddDate(0, 1, 0)
 		currentCreatedAfter := currentStartTime.Format("2006-01-02T15:04:05-07:00")
 		currentCreatedBefore := currentEndTime.Format("2006-01-02T15:04:05-07:00")
 
@@ -350,7 +350,7 @@ func (oh *OrderHandler) GetTransactionsByOrder(msg *nats.Msg) {
 			msg.Ack()
 		}
 	} else {
-		endTime = time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+		endTime = time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
 	}
 
 	// Get all orders with embedded SQLData from DB
@@ -378,7 +378,7 @@ func (oh *OrderHandler) GetTransactionsByOrder(msg *nats.Msg) {
 	// Process transactions in 3-month windows
 	currentStartTime := startTime
 	for {
-		currentEndTime := currentStartTime.AddDate(0, 3, 0)
+		currentEndTime := currentStartTime.AddDate(0, 1, 0)
 		currentStart := currentStartTime.Format("2006-01-02T15:04:05-07:00")
 		currentEnd := currentEndTime.Format("2006-01-02T15:04:05-07:00")
 

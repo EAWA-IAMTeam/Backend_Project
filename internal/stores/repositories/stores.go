@@ -162,12 +162,13 @@ func (sr *storeRepository) SaveAccessToken(accessToken *models.AccessToken) erro
 	} else {
 		// If not exists, insert new and get the ID
 		insertQuery := `
-		INSERT INTO accessToken (account_id, store_id, access_token, refresh_token, platform) 
-		VALUES ($1, $2, $3, $4, $5) 
+		INSERT INTO accessToken (account_id, store_id, company_id, access_token, refresh_token, platform) 
+		VALUES ($1, $2, $3, $4, $5, $6) 
 		RETURNING id`
 		err = sr.DB.QueryRow(insertQuery,
 			accessToken.AccountID,
 			accessToken.StoreID,
+			accessToken.CompanyID,
 			accessToken.AccessToken,
 			accessToken.RefreshToken,
 			accessToken.Platform,
