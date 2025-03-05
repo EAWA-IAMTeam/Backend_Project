@@ -9,12 +9,13 @@ import (
 	"log"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type OrderRepository interface {
 	FetchOrders(createdAfter string, createdBefore string, offset int, limit int, status string, sort_direction string) (*models.OrdersData, error)
 	SaveOrder(order *models.Order, companyID int64) error
-	FetchOrdersByCompanyID(companyID int64, page, limit int) ([]models.Order, int, error)
+	FetchOrdersByCompanyID(companyID int64, page, limit int, createdAfter, stopAfter string) ([]models.Order, int, error)
 }
 
 type orderRepository struct {
@@ -45,7 +46,7 @@ func (r *orderRepository) FetchOrders(createdAfter string, createdBefore string,
 	if status != "" {
 		r.client.AddAPIParam("status", status)
 	}
-
+	log.Println("Status", status)
 	if sort_direction != "" {
 		r.client.AddAPIParam("sort_direction", sort_direction)
 	}
@@ -153,17 +154,49 @@ func ConvertOrderToSQLData(order models.Order) models.Data {
 	}
 }
 
-func (r *orderRepository) FetchOrdersByCompanyID(companyID int64, page, limit int) ([]models.Order, int, error) {
-	//Calculate offset
+func (r *orderRepository) FetchOrdersByCompanyID(companyID int64, page, limit int, createdAfter, stopAfter string) ([]models.Order, int, error) {
+	// Calculate offset
 	offset := (page - 1) * limit
-	query := `
-		SELECT platform_order_id, tracking_id, status, data, item_list
-		FROM "Order"
-		WHERE company_id = $1
-		ORDER BY order_date DESC
-		LIMIT $2 OFFSET $3`
 
-	rows, err := r.DB.Query(query, companyID, limit, offset)
+	// Start building the query
+	query := `
+        SELECT platform_order_id, tracking_id, status, data, item_list
+        FROM "Order"
+        WHERE company_id = $1`
+
+	// Add conditions for createdAfter and stopAfter if they are provided
+	if createdAfter != "" {
+		query += ` AND order_date >= $4`
+	}
+	if stopAfter != "" {
+		query += ` AND order_date <= $5`
+	}
+
+	// Add the ORDER BY, LIMIT, and OFFSET clauses
+	query += `
+        ORDER BY order_date ASC
+        LIMIT $2 OFFSET $3`
+
+	// Prepare the arguments for the query
+	args := []interface{}{companyID, limit, offset}
+	if createdAfter != "" {
+		createdAfterTime, err := time.Parse(time.RFC3339, createdAfter)
+		if err != nil {
+			log.Printf("Error parsing createdAfter: %v", err)
+			return nil, 0, err
+		}
+		args = append(args, createdAfterTime.Format(time.RFC3339))
+	}
+	if stopAfter != "" {
+		stopAfterTime, err := time.Parse(time.RFC3339, stopAfter)
+		if err != nil {
+			log.Printf("Error parsing stopAfter: %v", err)
+			return nil, 0, err
+		}
+		args = append(args, stopAfterTime.Format(time.RFC3339))
+	}
+
+	rows, err := r.DB.Query(query, args...)
 	log.Print(rows)
 	if err != nil {
 		log.Printf("Error querying orders: %v", err)

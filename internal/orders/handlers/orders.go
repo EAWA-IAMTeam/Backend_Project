@@ -63,12 +63,14 @@ func (oh *OrderHandler) handleGetOrdersByCompany(msg *nats.Msg) {
 		msg.Ack()
 		return
 	}
-
+	// log.Println("Status2", request.Status)
 	// Get orders from repository
 	orders, _, err := oh.ordersService.FetchOrdersByCompanyID(
 		request.CompanyID,
 		request.Pagination.Page,
 		request.Pagination.Limit,
+		request.Created_after,
+		request.Stop_after,
 	)
 	if err != nil {
 		log.Printf("Error fetching orders: %v", err)
@@ -110,7 +112,7 @@ func (oh *OrderHandler) GetOrders(msg *nats.Msg) {
 	// }
 
 	var status = request.Status
-
+	log.Println("Status", status)
 	// Parse createdAfter or set default
 	var createdAfter = request.Created_after
 	if createdAfter == "" {
@@ -149,7 +151,7 @@ func (oh *OrderHandler) GetOrders(msg *nats.Msg) {
 
 	for {
 		// Set 3-month window
-		currentEndTime := currentStartTime.AddDate(0, 1, 0)
+		currentEndTime := currentStartTime.AddDate(0, 3, 0)
 		currentCreatedAfter := currentStartTime.Format("2006-01-02T15:04:05-07:00")
 		currentCreatedBefore := currentEndTime.Format("2006-01-02T15:04:05-07:00")
 
@@ -177,7 +179,7 @@ func (oh *OrderHandler) GetOrders(msg *nats.Msg) {
 		for !state.IsCompleted {
 			var batchOrders []models.Order
 			limit := 100
-			maxOrdersPerBatch := 4900 // Batch processing limit
+			maxOrdersPerBatch := 3000 // Batch processing limit
 
 			// Error handling and concurrency control
 			errorChan := make(chan error, maxOrdersPerBatch)
@@ -355,7 +357,7 @@ func (oh *OrderHandler) GetTransactionsByOrder(msg *nats.Msg) {
 
 	// Get all orders with embedded SQLData from DB
 	companyID := request.CompanyID
-	orders, _, err := oh.ordersService.FetchOrdersByCompanyID(companyID, request.Pagination.Limit, request.Pagination.Page)
+	orders, _, err := oh.ordersService.FetchOrdersByCompanyID(companyID, request.Pagination.Limit, request.Pagination.Page, request.Created_after, request.Stop_after)
 	if err != nil {
 		oh.respondWithError("Invalid Company ID", request.RequestID)
 		log.Println("Invalid Company ID:", err)

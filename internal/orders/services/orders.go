@@ -9,7 +9,7 @@ import (
 type OrdersService interface {
 	GetOrders(createdAfter string, createdBefore string, offset int, limit int, status string, sort_direction string) ([]models.Order, int, error)
 	SaveOrder(order *models.Order, companyID int64) error
-	FetchOrdersByCompanyID(companyID int64, page, limit int) ([]models.Order, int, error)
+	FetchOrdersByCompanyID(companyID int64, page, limit int, createdAfter, stopAfter string) ([]models.Order, int, error)
 }
 
 type ordersService struct {
@@ -78,6 +78,6 @@ func (s *ordersService) SaveOrder(order *models.Order, companyID int64) error {
 	return s.repo.SaveOrder(order, companyID)
 }
 
-func (s *ordersService) FetchOrdersByCompanyID(companyID int64, page, limit int) ([]models.Order, int, error) {
-	return s.repo.FetchOrdersByCompanyID(companyID, page, limit)
+func (s *ordersService) FetchOrdersByCompanyID(companyID int64, page, limit int, createdAfter, stopAfter string) ([]models.Order, int, error) {
+	return s.repo.FetchOrdersByCompanyID(companyID, page, limit, createdAfter, stopAfter)
 }

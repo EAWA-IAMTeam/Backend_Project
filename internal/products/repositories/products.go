@@ -307,7 +307,7 @@ func (pr *ProductRepository) InsertProductBatch(products []*models.Request) (*mo
 
 // GetStoreByCompany fetches Store IDs for a given company from the database with platform as key
 func (r *ProductRepository) GetStoreByCompany(companyID int64) (map[string][]int64, error) {
-	query := "SELECT id, platform FROM store WHERE company_id = $1"
+	query := "SELECT store_id, platform FROM store WHERE company_id = $1"
 	rows, err := r.DB.Query(query, companyID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query database: %w", err)

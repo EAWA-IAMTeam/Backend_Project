@@ -17,6 +17,8 @@ type RequestHandler struct {
 	js nats.JetStreamContext
 }
 
+var timeDuration = 15 * time.Second // 15 seconds
+
 func NewRequestHandler(nc *nats.Conn, js nats.JetStreamContext) *RequestHandler {
 	// Ensure the ORDERS stream exists
 	_, err := js.AddStream(&nats.StreamConfig{
@@ -26,7 +28,8 @@ func NewRequestHandler(nc *nats.Conn, js nats.JetStreamContext) *RequestHandler 
 		// MaxMsgSize:        370000000,
 		// MaxMsgsPerSubject: 37000000,
 		// MaxMsgs:           370000,
-		Storage: nats.FileStorage, // Persistent storage
+		Storage:   nats.FileStorage, // Persistent storage
+		Retention: nats.WorkQueuePolicy,
 	})
 	if err != nil && err != nats.ErrStreamNameAlreadyInUse {
 		log.Fatalf("Failed to create JetStream stream: %v", err)
@@ -99,7 +102,7 @@ func (h *RequestHandler) HandleGetRequest(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to subscribe for response"})
 	}
 	// Fetch response (wait up to 5 seconds)
-	timeout := time.After(5 * time.Minute)
+	timeout := time.After(15 * time.Second)
 	for {
 		select {
 		case <-timeout:
@@ -285,7 +288,7 @@ func (h *RequestHandler) PostSQLItems(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to subscribe for response"})
 	}
 
-	timeout := time.After(5 * time.Minute)
+	timeout := time.After(15 * time.Second)
 	for {
 		select {
 		case <-timeout:
@@ -353,7 +356,7 @@ func (h *RequestHandler) PostProducts(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to subscribe for response"})
 	}
 
-	timeout := time.After(5 * time.Minute)
+	timeout := time.After(15 * time.Second)
 	for {
 		select {
 		case <-timeout:
@@ -419,7 +422,7 @@ func (h *RequestHandler) DeleteProduct(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to subscribe for response"})
 	}
 
-	timeout := time.After(5 * time.Minute)
+	timeout := time.After(15 * time.Second)
 	for {
 		select {
 		case <-timeout:
@@ -483,7 +486,11 @@ func (h *RequestHandler) DeleteProductsBatch(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to subscribe for response"})
 	}
 
-	timeout := time.After(1 * time.Minute)
+	if topic == "order" {
+		timeDuration = 5 * time.Minute
+	}
+
+	timeout := time.After(timeDuration)
 	for {
 		select {
 		case <-timeout:
